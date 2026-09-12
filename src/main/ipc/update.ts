@@ -14,6 +14,9 @@ import { logMain } from '../services/log'
  * - 检查通过后自动后台下载，下载完成推 'ready'，渲染层引导用户「重启安装」。
  */
 
+/** 内置官方更新源：用户零配置即可收到更新；设置里填地址则覆盖（镜像/内网发布场景） */
+export const DEFAULT_UPDATE_FEED = 'https://github.com/ruai0/Lantai'
+
 let state: UpdateState = { phase: 'idle', current: app.getVersion() }
 
 function push(): void {
@@ -36,10 +39,11 @@ function notesOf(info: UpdateInfo): string | undefined {
   return undefined
 }
 
-/** 应用 updateFeed 设置；返回是否配置了可用更新源。github.com/<owner>/<repo> 走 GitHub Releases，其余按通用静态目录 */
+/** 应用更新源：未配置则走内置官方源；填 off 彻底禁用（物理断网机器的显式开关）。github.com/<owner>/<repo> 走 GitHub Releases，其余按通用静态目录 */
 function applyFeed(): boolean {
-  const feed = getSettings().updateFeed.trim()
-  if (!feed) return false
+  const raw = getSettings().updateFeed.trim()
+  if (/^(off|none|-)$/i.test(raw)) return false
+  const feed = raw || DEFAULT_UPDATE_FEED
   if (!/^https?:\/\//i.test(feed)) {
     logMain('warn', `updateFeed 非 http(s) 地址，忽略：${feed}`)
     return false
@@ -74,7 +78,7 @@ export function initAutoUpdater(): void {
     logMain('warn', `更新失败：${e.message}`)
   })
 
-  // 启动静默检查（5s 后避开冷启动）；未配置更新源则跳过
+  // 启动静默检查（5s 后避开冷启动）；走内置官方源或用户配置的镜像地址
   setTimeout(() => {
     if (applyFeed()) void autoUpdater.checkForUpdates().catch(() => {})
   }, 5000)
@@ -82,7 +86,7 @@ export function initAutoUpdater(): void {
 
 handle('update:check', async () => {
   if (!app.isPackaged) return { ...state, error: state.error ?? '开发环境不检查更新' }
-  if (!applyFeed()) return { ...state, phase: 'idle' as const, error: '未配置更新源（设置 → 软件更新）' }
+  if (!applyFeed()) return { ...state, phase: 'error' as const, error: '更新源地址无效' }
   try {
     await autoUpdater.checkForUpdates()
   } catch (e) {

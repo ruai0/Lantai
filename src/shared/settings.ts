@@ -13,7 +13,7 @@ export interface AppSettings {
   notify: boolean
   /** 收藏的工具路由 path（首页置顶 + 侧栏收藏分组） */
   favorites: string[]
-  /** 更新源根地址（latest.yml 所在目录，http/https）；留空 = 关闭一切更新行为 */
+  /** 更新源地址（latest.yml 所在目录，http/https）；留空 = 使用内置官方源 */
   updateFeed: string
 }
 

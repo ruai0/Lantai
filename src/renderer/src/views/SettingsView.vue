@@ -222,27 +222,24 @@ function fmtTime(t: number): string {
     </StepCard>
 
     <StepCard :step="6" title="软件更新">
-      <div class="outdir-row">
-        <el-input
-          v-model="feedInput"
-          placeholder="更新源地址，如 https://dl.example.com/lantai 或 https://github.com/ruai0/Lantai（留空 = 永不检查）"
-          clearable
-          @change="saveFeed"
-        />
-        <el-button type="primary" plain :loading="checking" @click="runCheck">检查更新</el-button>
-        <el-button v-if="updateState.phase === 'ready'" type="success" :loading="installing" @click="runInstall">
-          重启并安装
-        </el-button>
-      </div>
-      <p class="hint">
-        当前版本 v{{ version }} ·
+      <div class="update-row">
+        <span>当前版本 v{{ version }}</span>
         <el-tag :type="updateStatus.type" size="small">{{ updateStatus.text }}</el-tag>
-      </p>
+        <span class="update-actions">
+          <el-button type="primary" plain size="small" :loading="checking" @click="runCheck">检查更新</el-button>
+          <el-button v-if="updateState.phase === 'ready'" type="success" size="small" :loading="installing" @click="runInstall">
+            重启并安装
+          </el-button>
+        </span>
+      </div>
       <p v-if="updateState.notes" class="hint" style="white-space: pre-wrap">{{ updateState.notes }}</p>
-      <p class="hint">
-        更新源指向存放 latest.yml + 安装包的目录（自建静态服务或 GitHub Releases 仓库主页均可）。未配置时应用不会发起任何网络请求；
-        安装包未做代码签名，升级包完整性由 SHA-512 校验。
-      </p>
+      <details class="adv">
+        <summary>更新源设置（一般无需修改）</summary>
+        <div class="outdir-row" style="margin-top: 10px">
+          <el-input v-model="feedInput" placeholder="留空 = 官方源" clearable @change="saveFeed" />
+        </div>
+        <p class="hint">默认从官方仓库检查更新；内网机器填一个存放更新文件的 http 目录地址；彻底禁用填 off。</p>
+      </details>
     </StepCard>
 
     <div class="about">
@@ -312,6 +309,30 @@ function fmtTime(t: number): string {
 }
 .probe-bad {
   color: var(--el-color-danger, #f56c6c) !important;
+}
+.update-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.update-actions {
+  margin-left: auto;
+}
+.adv {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.adv summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-3);
+  user-select: none;
+}
+.adv summary:hover {
+  color: var(--text-2);
 }
 .about {
   display: flex;

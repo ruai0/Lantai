@@ -34,6 +34,11 @@ const SCENARIOS = [
       r.notifyOk
   },
   {
+    file: 'ui-platform.js',
+    name: '任务进度/环境探测/拖目录/撤销',
+    check: r => r.expandOk && r.probeOk && r.diagHasProbe && r.undoRound && r.progressSeen && r.dockShown && r.zipOk && r.mergedTwice
+  },
+  {
     file: 'ui-settings.js',
     name: '设置（主题/完成行为/默认目录）',
     check: r => r.versionShown && r.themeDark && r.themeLight && r.onCompletePersisted && r.defaultDirPrefilled

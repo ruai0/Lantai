@@ -36,7 +36,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://github.com/ruai1024/lantai/releases/latest/download"
+        "url": "https://github.com/ruai0/Lantai/releases/latest/download"
       }
     ],
     "win": {

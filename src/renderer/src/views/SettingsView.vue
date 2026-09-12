@@ -225,7 +225,7 @@ function fmtTime(t: number): string {
       <div class="outdir-row">
         <el-input
           v-model="feedInput"
-          placeholder="更新源地址，如 https://dl.example.com/lantai 或 https://github.com/ruai1024/lantai（留空 = 永不检查）"
+          placeholder="更新源地址，如 https://dl.example.com/lantai 或 https://github.com/ruai0/Lantai（留空 = 永不检查）"
           clearable
           @change="saveFeed"
         />

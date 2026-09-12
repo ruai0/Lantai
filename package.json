@@ -1,0 +1,74 @@
+{
+  "name": "freetool",
+  "version": "0.5.0",
+  "description": "FreeTool 桌面办公工具箱：PDF / 图片 / Excel / 表格匹配比对 / Office转PDF / 批量替换 / 模板填充 / 文件管理 / 小工具",
+  "main": "./out/main/index.js",
+  "author": "FreeTool",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "node scripts/check-renderer.mjs && electron-vite build",
+    "check:renderer": "node scripts/check-renderer.mjs",
+    "preview": "electron-vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "dist": "electron-vite build && electron-builder",
+    "gen:icon": "node scripts/make-icon.mjs"
+  },
+  "build": {
+    "appId": "com.freetool.officebox",
+    "productName": "FreeTool",
+    "compression": "maximum",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**",
+      "!**/node_modules/**/*.{md,map,d.ts,ts}"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "docxtemplater": "^3.69.3",
+    "exceljs": "^4.4.0",
+    "iconv-lite": "^0.7.3",
+    "jsqr": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
+    "pinyin-pro": "^3.29.4",
+    "pizzip": "^3.2.0"
+  },
+  "devDependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@types/node": "^26.4.1",
+    "@types/qrcode": "^1.5.6",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "element-plus": "^2.14.5",
+    "qrcode": "^1.5.4",
+    "typescript": "5.9",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.0",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1",
+    "vue-tsc": "^3.3.11"
+  }
+}

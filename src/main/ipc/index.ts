@@ -1,0 +1,10 @@
+// 汇总注册所有 IPC 通道；main 入口 import 本文件即完成注册
+import './system'
+import './pdf'
+import './office'
+import './excel'
+import './filekit'
+import './replace'
+import './tools'
+import './rename'
+import './hash'

@@ -100,10 +100,6 @@ src/
 - 图片处理走 Canvas，超大图（>50MP）内存占用较高；avif 编码、HEIC 解码暂不支持。
 - PDF 转图片/提取文字/压缩按整页逐页处理，数百页大文件耗时较长。
 
-## 后续规划
-
-剪贴板历史、取色器、PDF 加密/解密（需打包外部工具）。已明确不做：OCR 文字识别、抠图去背景（需引入模型、包体积与准确率不划算）。
-
 ## 设计文档
 
 [docs/superpowers/specs/2026-09-07-freetool-design.md](docs/superpowers/specs/2026-09-07-freetool-design.md)

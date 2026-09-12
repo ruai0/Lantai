@@ -56,6 +56,8 @@ import type {
 } from '../shared/types'
 
 export interface FreeToolApi {
+  /** 拖拽的 File → 绝对路径（同步，webUtils） */
+  getPathForFile(file: File): string
   pickFiles(p?: PickFilesParams): Promise<ApiResult<string[]>>
   pickDirectory(title?: string): Promise<ApiResult<string | null>>
   readFiles(paths: string[]): Promise<ApiResult<PickedFile[]>>

@@ -10,13 +10,13 @@
   st.zipName = 'ftest-img'
   st.zipOutDir = OUT
   await st.runZip()
-  res.pack = st.zipOutputs
+  res.pack = JSON.parse(JSON.stringify(st.zipOutputs || []))
   if (res.pack.length) {
     st.zipMode = 'unpack'
     st.zipFiles = [res.pack[0]]
     st.zipOutDir = OUT + '/unpacked'
     await st.runZip()
-    res.unpack = st.zipOutputs
+    res.unpack = JSON.parse(JSON.stringify(st.zipOutputs || []))
   }
   return res
 })()

@@ -1,0 +1,17 @@
+{
+  "added": 1,
+  "deleted": 0,
+  "changed": 1,
+  "same": 3,
+  "truncated": false,
+  "types": [
+    "same:1:1",
+    "chg:2:2",
+    "same:3:3",
+    "same:4:4",
+    "add:-:5"
+  ],
+  "domLines": 5,
+  "swappedChanged": 1,
+  "swappedAdded": 0
+}

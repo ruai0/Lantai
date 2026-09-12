@@ -30,6 +30,15 @@ function stamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
+/**
+ * pdf-lib 的 JpegEmbedder/PngEmbedder 用 `new DataView(buf.buffer)` 从 0 开始读魔数，
+ * 而 Node 的 Buffer 小于 4KB 时落在共享内存池里（byteOffset ≠ 0），
+ * 于是合法的小 JPEG/PNG 会报「SOI not found in JPEG」。统一拷贝成独立 Uint8Array 再嵌入。
+ */
+function standalone(data: Buffer | Uint8Array): Uint8Array {
+  return new Uint8Array(data)
+}
+
 async function save(doc: PDFDocument, outDir: string, filename: string): Promise<string> {
   const bytes = await doc.save()
   const out = uniquePath(outDir, filename)
@@ -145,7 +154,7 @@ export async function imagesToPdf(params: PdfImagesParams): Promise<PdfResult> {
     const kind = IMAGE_TYPES[path.extname(p).toLowerCase()]
     if (!kind) throw new Error(`暂只支持 JPG / PNG 图片（不支持：${path.basename(p)}）`)
     const bytes = await fs.promises.readFile(p)
-    const img = kind === 'jpg' ? await doc.embedJpg(bytes) : await doc.embedPng(bytes)
+    const img = kind === 'jpg' ? await doc.embedJpg(standalone(bytes)) : await doc.embedPng(standalone(bytes))
     const page = doc.addPage([img.width, img.height])
     page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height })
   }
@@ -236,7 +245,7 @@ export async function stampImage(params: PdfStampParams): Promise<PdfResult> {
     throw new Error('盖章图片仅支持 PNG / JPG')
   }
   const doc = await loadPdf(params.path)
-  const imgBytes = await fs.promises.readFile(params.imagePath)
+  const imgBytes = standalone(await fs.promises.readFile(params.imagePath))
   const img = ext === '.png' ? await doc.embedPng(imgBytes) : await doc.embedJpg(imgBytes)
   const opacity = Math.min(1, Math.max(0.1, params.opacity))
   const scale = Math.min(100, Math.max(2, params.scalePercent)) / 100
@@ -327,7 +336,7 @@ export async function buildFromImages(params: import('@shared/types').PdfBuildPa
   if (params.imagesBase64.length === 0) throw new Error('没有可写入的页面')
   const doc = await PDFDocument.create()
   for (const b64 of params.imagesBase64) {
-    const bytes = Buffer.from(b64, 'base64')
+    const bytes = standalone(Buffer.from(b64, 'base64'))
     // 依据 magic 判断 png / jpeg
     const isPng = bytes[0] === 0x89 && bytes[1] === 0x50
     const img = isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes)

@@ -12,6 +12,12 @@ let tmp: string
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
+// 1x1 JPEG：解码后仅 160 字节，Buffer.from 会落进 Node 共享内存池（byteOffset≠0）。
+// pdf-lib 的 JpegEmbedder 用 new DataView(buf.buffer) 从 0 读魔数，池内 Buffer 会误报「SOI not found」。
+// buildFromImages 内部已用 standalone() 拷贝成独立 Uint8Array 规避，此测试锁死该回归。
+const TINY_JPG_B64 =
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q=='
+
 async function writeSheet(name: string, rows: (string | number)[][]): Promise<string> {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('S')
@@ -129,5 +135,11 @@ describe('PDF 页面整理 / 重建', () => {
     const r = await buildFromImages({ imagesBase64: [TINY_PNG_B64, TINY_PNG_B64], outDir: tmp, nameHint: '压缩测试' })
     const doc = await PDFDocument.load(await fs.promises.readFile(r.outputs[0]))
     expect(doc.getPageCount()).toBe(2)
+  })
+
+  it('buildFromImages 能嵌入池内小 JPEG（回归 SOI bug）', async () => {
+    const r = await buildFromImages({ imagesBase64: [TINY_JPG_B64], outDir: tmp, nameHint: '小jpeg' })
+    const doc = await PDFDocument.load(await fs.promises.readFile(r.outputs[0]))
+    expect(doc.getPageCount()).toBe(1)
   })
 })

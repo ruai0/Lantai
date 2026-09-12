@@ -12,6 +12,7 @@
     "preview": "electron-vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
+    "test:ui": "node scripts/ui-smoke.mjs",
     "dist": "electron-vite build && electron-builder",
     "gen:icon": "node scripts/make-icon.mjs"
   },

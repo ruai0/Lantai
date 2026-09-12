@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { plain } from '../shared/serialize'
 
 /** 统一入口：把 Vue 的 Proxy/ref 转成可结构化克隆的纯数据 */
@@ -6,6 +6,8 @@ const invoke = (channel: string, ...args: unknown[]): Promise<unknown> =>
   ipcRenderer.invoke(channel, ...args.map(a => plain(a)))
 
 const api = {
+  /** 拖拽进来的 File → 真实路径（Electron 32+ 移除了 File.path，必须走 webUtils） */
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   pickFiles: (p?: unknown) => invoke('dialog:pick-files', p),
   pickDirectory: (title?: string) => invoke('dialog:pick-directory', title),
   readFiles: (paths: string[]) => invoke('file:read-many', paths),

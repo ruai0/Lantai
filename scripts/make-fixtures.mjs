@@ -98,3 +98,19 @@ await sheet(F('副表.xlsx'), ['工号', '部门', '电话'], [['001', '网络�
 await sheet(F('名单A.xlsx'), ['工号', '姓名', '手机'], [['001', '张三', '13800000001'], ['002', '李四', '13800000002'], ['004', '赵六', '13800000004']])
 await sheet(F('名单B.xlsx'), ['工号', '姓名', '手机'], [['001', '张三', '13800000001'], ['002', '李四', '13900000002'], ['003', '王五', '13800000003']])
 await sheet(F('名单加拼音.xlsx'), ['姓名', '单位'], [['张三', '网络部'], ['李四', '运维部'], ['王五', '综合部']])
+
+/* ---- 多页 PDF 素材（pdf-lib，带可提取文字） ---- */
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib')
+async function makePdf(file, pages, size, label, color) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (let i = 0; i < pages; i++) {
+    const page = doc.addPage([size.w, size.h])
+    page.drawRectangle({ x: 20, y: 20, width: size.w - 40, height: size.h - 40, color, opacity: 0.15 })
+    page.drawText(`${label} page ${i + 1}`, { x: 40, y: size.h - 60, size: 24, font, color: rgb(0, 0, 0) })
+  }
+  fs.writeFileSync(file, await doc.save())
+  console.log('pdf:', file, `${pages}页`)
+}
+await makePdf(F('fixture-a.pdf'), 2, { w: 595, h: 842 }, 'FIXTURE-A', rgb(0.2, 0.4, 0.8))
+await makePdf(F('fixture-b.pdf'), 3, { w: 612, h: 792 }, 'FIXTURE-B', rgb(0.8, 0.5, 0.1))

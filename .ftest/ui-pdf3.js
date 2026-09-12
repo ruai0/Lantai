@@ -1,8 +1,10 @@
 (async () => {
   const __Z = window.__Z
-  const st = __Z.vm('orgFiles') // PdfView
-  const P = 'C:/Users/REALE ME/Downloads/4-权限管理数据库模型.pdf'
-  const OUT = 'J:/chinaMobile/network_project/freeTool/.ftest/out'
+  if (!(await __Z.nav('#/pdf', 'orgFiles'))) return { fail: 'PdfView 未挂载' }
+  const st = __Z.vm('orgFiles')
+  const FT = 'J:/chinaMobile/network_project/freeTool/.ftest/'
+  const P = FT + 'fixture-a.pdf'
+  const OUT = FT + 'out'
   const res = {}
   try {
     st.tab = 'compress'
@@ -13,7 +15,7 @@
     st.outputs = []
     st.compResult = null
     await st.run()
-    res.compress = { outputs: st.outputs, beforeAfterKB: st.compResult && [Math.round(st.compResult.before / 1024), Math.round(st.compResult.after / 1024)] }
+    res.compress = st.outputs.length > 0 && st.compResult ? 'ok' : { fail: '无输出', outputs: st.outputs }
   } catch (e) { res.compress = 'threw: ' + String(e) }
   try {
     st.tab = 'toimg'
@@ -22,7 +24,7 @@
     st.outDir = OUT
     st.outputs = []
     await st.run()
-    res.toimg = st.outputs
+    res.toimg = st.outputs.length === 2 ? 'ok' : { fail: '期望 2 张 PNG', got: st.outputs.length }
   } catch (e) { res.toimg = 'threw: ' + String(e) }
   try {
     st.tab = 'text'
@@ -30,7 +32,7 @@
     st.outDir = OUT
     st.outputs = []
     await st.run()
-    res.text = st.outputs
+    res.text = st.outputs.length > 0 ? 'ok' : { fail: '无 TXT 输出' }
   } catch (e) { res.text = 'threw: ' + String(e) }
   return res
 })()

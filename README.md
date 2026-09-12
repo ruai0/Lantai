@@ -25,6 +25,7 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 - 字体：标题与技术编号用 Windows 自带的 `Bahnschrift`（DIN 风格窄体，离线可用），正文保留 `Microsoft YaHei / PingFang SC` 保证中文可读性，文件名与数值用等宽 `Cascadia Mono / Consolas`。
 - 功能页共用的类名（`step-card`、`step-no`、`file-list`、`tool-grid`、`form-row` 等）保持不变，新增页面沿用即可自动获得同一套观感。
 - 已适配 `prefers-reduced-motion`，窄屏下隐藏横幅仪表装饰并收紧留白。
+- 所有文件选择区支持**拖拽导入**：把文件拖到虚线框即加入列表（按各功能的类型过滤，目录外拖入不会误触发页面导航）。
 
 ## 运维与排障
 
@@ -41,6 +42,7 @@ npm run dev      # 开发模式（热更新）
 npm run build    # 构建到 out/
 npm run typecheck
 npm run test     # vitest 单测 + 临时目录集成冒烟测试
+npm run test:ui  # 一键 UI 冒烟：自动构建测试包→起 CDP→跑 8 组真实界面场景→关（约 10 秒）
 npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
 ```
 
@@ -74,7 +76,7 @@ src/
 
 - IPC 通道按工具分组（`pdf:merge`、`excel:mask`、`excel:match-fill`、`excel:compare`、`office:to-pdf`、`file:find-duplicates`、`zip:pack`、`text:extract`…），业务异常在 main 统一包装为 `{ ok:false, error }`。
 - 输出文件重名自动追加 `(2)`，绝不覆盖。
-- 测试：vitest 覆盖 main 内纯函数（页码解析、重命名计划、脱敏、CSV 解析、重复分组、联系方式提取、Word XML 替换、关联键归一）+ 临时目录集成冒烟（真实 xlsx/PDF/zip 读写往返，含匹配填充、差异比对、页面整理、图片重建 PDF）。
+- 测试：vitest 覆盖 main 内纯函数（页码解析、重命名计划、脱敏、CSV 解析、重复分组、联系方式提取、Word XML 替换、关联键归一、文本差异）+ 临时目录集成冒烟（真实 xlsx/PDF/zip 读写往返，含匹配填充、差异比对、页面整理、图片重建 PDF）；`npm run test:ui` 用 CDP 驱动真实界面跑 8 组端到端场景。
 
 ## 已知限制（v0.5）
 

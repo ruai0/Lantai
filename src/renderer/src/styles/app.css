@@ -935,3 +935,21 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- 拖拽选文件区 ---------- */
+
+.pick-zone {
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.pick-zone--over {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+.pick-zone .pick-count {
+  margin-left: 10px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}

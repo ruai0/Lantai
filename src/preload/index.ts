@@ -57,7 +57,9 @@ const api = {
   getVersion: () => invoke('settings:version'),
   getHistory: () => invoke('history:get'),
   addHistory: (entry: unknown) => invoke('history:add', entry),
-  clearHistory: () => invoke('history:clear')
+  clearHistory: () => invoke('history:clear'),
+  notify: (p: unknown) => invoke('app:notify', p),
+  diagnostics: () => invoke('app:diagnostics')
 }
 
 contextBridge.exposeInMainWorld('api', api)

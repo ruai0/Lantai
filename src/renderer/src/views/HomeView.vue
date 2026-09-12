@@ -1,115 +1,27 @@
 <script setup lang="ts">
-import { markRaw } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  Connection,
-  CopyDocument,
-  Document,
-  EditPen,
-  Files,
-  FolderChecked,
-  Grid,
-  Picture,
-  Promotion,
-  Search
-} from '@element-plus/icons-vue'
+import { Star, StarFilled } from '@element-plus/icons-vue'
+import { groupedTools, toolByPath, type ToolDef } from '../tools'
+import { favorites, isFavorite, toggleFavorite } from '../utils/settings'
 
 const router = useRouter()
 
-interface Tool {
-  path: string
-  icon: ReturnType<typeof markRaw>
-  name: string
-  desc: string
-}
-
-const groups: Array<{ title: string; caption: string; tools: Tool[] }> = [
-  {
-    title: '文档与 PDF',
-    caption: '报送、归档、盖章',
-    tools: [
-      {
-        path: '/pdf',
-        icon: markRaw(Document),
-        name: 'PDF 工具',
-        desc: '合并 / 拆分 / 删页 / 旋转 / 页码 / 水印 / 盖章 / 压缩 / 提取文字 / 页面整理'
-      },
-      {
-        path: '/image',
-        icon: markRaw(Picture),
-        name: '图片工具',
-        desc: '批量压缩、格式转换、水印、长图拼接、证件照排版'
-      },
-      {
-        path: '/convert',
-        icon: markRaw(Promotion),
-        name: 'Office 转 PDF',
-        desc: 'Word / Excel / PPT 批量转 PDF，调用本机 Office 或 WPS'
-      },
-      {
-        path: '/office',
-        icon: markRaw(Files),
-        name: '文档模板填充',
-        desc: '模板写 {字段} + 数据表，按行批量生成通知书、证明'
-      },
-      {
-        path: '/replace',
-        icon: markRaw(Search),
-        name: '批量查找替换',
-        desc: '多个 Word / Excel 一次改文字，适合更名、改日期'
-      }
-    ]
-  },
-  {
-    title: '表格与数据',
-    caption: '台账、报表、核对',
-    tools: [
-      {
-        path: '/excel',
-        icon: markRaw(Grid),
-        name: 'Excel 工具',
-        desc: '多簿合并、按表/行/列值拆分、CSV 转换、数据脱敏'
-      },
-      {
-        path: '/match',
-        icon: markRaw(Connection),
-        name: '表格匹配 / 比对',
-        desc: '跨表匹配填充替代 VLOOKUP，两版名单差异一键出报告'
-      }
-    ]
-  },
-  {
-    title: '文件与效率',
-    caption: '整理、清单、小工具',
-    tools: [
-      {
-        path: '/rename',
-        icon: markRaw(EditPen),
-        name: '重命名 / 归类',
-        desc: '批量重命名带冲突预检，按扩展名或日期自动归类'
-      },
-      {
-        path: '/filekit',
-        icon: markRaw(FolderChecked),
-        name: '文件管理',
-        desc: '送审清单导出、重复文件查找、ZIP 打包与批量解压'
-      },
-      {
-        path: '/tools',
-        icon: markRaw(CopyDocument),
-        name: '常用小工具',
-        desc: 'JSON、编解码、哈希、二维码生成与识别、提取联系方式、名单加拼音'
-      }
-    ]
-  }
-]
-
 let seq = 0
-const total = groups.reduce((n, g) => n + g.tools.length, 0)
-const indexed = groups.map(g => ({
-  ...g,
-  tools: g.tools.map(t => ({ ...t, idx: String(++seq).padStart(2, '0') }))
-}))
+const indexed = computed(() =>
+  groupedTools().map(g => ({
+    ...g,
+    tools: g.tools.map(t => ({ ...t, idx: String(++seq).padStart(2, '0') }))
+  }))
+)
+const total = computed(() => groupedTools().reduce((n, g) => n + g.tools.length, 0))
+
+const pinned = computed<ToolDef[]>(() => favorites.value.map(p => toolByPath(p)).filter((t): t is ToolDef => !!t))
+
+async function toggle(t: ToolDef, e: Event): Promise<void> {
+  e.stopPropagation()
+  await toggleFavorite(t.path)
+}
 </script>
 
 <template>
@@ -147,6 +59,36 @@ const indexed = groups.map(g => ({
       </div>
     </header>
 
+    <section v-if="pinned.length">
+      <div class="section-label">
+        <span>常用工具</span>
+        <span style="letter-spacing: 0.04em; text-transform: none; font-family: var(--font-body)">你收藏的，点击卡片直达</span>
+      </div>
+      <div class="tool-grid">
+        <el-card
+          v-for="t in pinned"
+          :key="'fav-' + t.path"
+          class="tool-card tool-card--fav"
+          shadow="never"
+          @click="router.push(t.path)"
+        >
+          <div class="tool-head">
+            <div class="tool-icon">
+              <el-icon :size="19"><component :is="t.icon" /></el-icon>
+            </div>
+            <div>
+              <div class="tool-name">{{ t.name }}</div>
+              <div class="tool-idx">已收藏</div>
+            </div>
+          </div>
+          <div class="tool-desc">{{ t.desc }}</div>
+          <button class="tool-star" title="取消收藏" @click="toggle(t, $event)">
+            <el-icon :size="16"><StarFilled /></el-icon>
+          </button>
+        </el-card>
+      </div>
+    </section>
+
     <section v-for="g in indexed" :key="g.title">
       <div class="section-label">
         <span>{{ g.title }}</span>
@@ -171,17 +113,49 @@ const indexed = groups.map(g => ({
             </div>
           </div>
           <div class="tool-desc">{{ t.desc }}</div>
+          <button
+            class="tool-star"
+            :class="{ 'tool-star--on': isFavorite(t.path) }"
+            :title="isFavorite(t.path) ? '取消收藏' : '收藏到常用'"
+            @click="toggle(t, $event)"
+          >
+            <el-icon :size="16"><StarFilled v-if="isFavorite(t.path)" /><Star v-else /></el-icon>
+          </button>
           <span class="tool-arrow">→</span>
         </el-card>
       </div>
     </section>
-
-    <el-alert
-      style="margin-top: 28px"
-      type="info"
-      :closable="false"
-      title="后续规划"
-      description="剪贴板历史、取色器、PDF 加密与解密保护。已明确不做：OCR 文字识别、抠图去背景（需引入模型，体积与准确率不划算）。"
-    />
   </div>
 </template>
+
+<style scoped>
+.tool-star {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  display: inline-flex;
+}
+.tool-card:hover .tool-star {
+  opacity: 1;
+}
+.tool-star:hover {
+  background: var(--surface-2);
+  color: var(--amber);
+}
+.tool-star--on {
+  opacity: 1;
+  color: var(--amber);
+}
+.tool-card--fav .tool-star {
+  opacity: 1;
+  color: var(--amber);
+}
+</style>

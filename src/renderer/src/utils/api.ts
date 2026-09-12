@@ -29,6 +29,10 @@ export async function call<T>(p: Promise<ApiResult<T>>, successMsg?: string): Pr
       const mode = settings.value.onComplete
       if (mode === 'openFolder') void api.openPath(dirname(outputs[0]))
       else if (mode === 'openFile') void api.openPath(outputs[0])
+      // 窗口不在前台时补一条系统通知，点击可唤回主窗口
+      if (settings.value.notify && !document.hasFocus()) {
+        void api.notify({ title: `FreeTool · ${successMsg}`, body: basename(outputs[0]) })
+      }
     }
   }
   return res.data

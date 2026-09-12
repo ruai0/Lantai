@@ -9,12 +9,18 @@ export interface AppSettings {
   /** 任务完成后的行为：仅提示 / 打开所在文件夹 / 打开输出文件 */
   onComplete: OnComplete
   theme: Theme
+  /** 窗口不在前台时，任务完成弹系统通知 */
+  notify: boolean
+  /** 收藏的工具路由 path（首页置顶 + 侧栏收藏分组） */
+  favorites: string[]
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   defaultOutDir: '',
   onComplete: 'notify',
-  theme: 'light'
+  theme: 'light',
+  notify: true,
+  favorites: []
 }
 
 /** 归一化：缺字段补默认、非法枚举回退，兼容旧配置文件 */
@@ -25,7 +31,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
   return {
     defaultOutDir: typeof s.defaultOutDir === 'string' ? s.defaultOutDir : '',
     onComplete,
-    theme
+    theme,
+    notify: s.notify !== false,
+    favorites: Array.isArray(s.favorites) ? s.favorites.filter((x): x is string => typeof x === 'string') : []
   }
 }
 

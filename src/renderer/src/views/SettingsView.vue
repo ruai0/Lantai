@@ -38,6 +38,27 @@ async function chooseTheme(v: string | number | boolean) {
   await updateSettings({ theme: v as Theme })
 }
 
+async function toggleNotify(v: boolean | string | number) {
+  await updateSettings({ notify: v === true })
+}
+
+async function copyDiagnostics() {
+  const res = await api.diagnostics()
+  if (!res.ok) {
+    ElMessage.error(res.error)
+    return
+  }
+  const text = Object.entries(res.data)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n')
+  try {
+    await navigator.clipboard.writeText(`FreeTool 诊断信息\n${text}`)
+    ElMessage.success('诊断信息已复制，可直接发给技术支持')
+  } catch {
+    ElMessage.error('复制失败：剪贴板不可用，请截图或重试')
+  }
+}
+
 function openOutput(p: string) {
   void api.openPath(p)
 }
@@ -75,6 +96,10 @@ function fmtTime(t: number): string {
         <el-radio-button value="openFile">打开输出文件</el-radio-button>
       </el-radio-group>
       <p class="hint">统一所有导出/转换类操作完成后的行为。</p>
+      <div class="notify-row">
+        <span>窗口不在前台时，任务完成弹系统通知</span>
+        <el-switch :model-value="settings.notify" @change="toggleNotify" />
+      </div>
     </StepCard>
 
     <StepCard :step="3" title="外观">
@@ -118,6 +143,7 @@ function fmtTime(t: number): string {
       <span>FreeTool 办公工具箱 v{{ version }}</span>
       <span class="about-dot">·</span>
       <span>本机离线处理，文件不出电脑</span>
+      <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>
     </div>
   </div>
 </template>
@@ -127,6 +153,16 @@ function fmtTime(t: number): string {
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--text-3);
+}
+.notify-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--text-2);
 }
 .hist-outputs {
   display: flex;

@@ -1,22 +1,38 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, shell, Tray } from 'electron'
 import path from 'node:path'
 import './ipc'
 import { installCrashLogging, logMain } from './services/log'
 import { clampToDisplays, loadWindowState, watchWindowState } from './services/windowState'
+import { focusMainWindow, setMainWindow } from './mainWindow'
 
 installCrashLogging()
+
+let tray: Tray | null = null
 
 // 单实例：第二次启动时聚焦已有窗口而不是再开一个
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
-  })
+  app.on('second-instance', () => focusMainWindow())
+}
+
+function createTray(): void {
+  if (tray) return
+  try {
+    const icon = nativeImage.createFromPath(path.join(__dirname, '../renderer/tray.png')).resize({ width: 16, height: 16 })
+    tray = new Tray(icon)
+    tray.setToolTip('FreeTool 办公工具箱')
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: '显示主窗口', click: () => focusMainWindow() },
+        { type: 'separator' },
+        { label: '退出', click: () => app.quit() }
+      ])
+    )
+    tray.on('click', () => focusMainWindow())
+  } catch (e) {
+    logMain('warn', `托盘创建失败：${e instanceof Error ? e.message : String(e)}`)
+  }
 }
 
 function createWindow(): BrowserWindow {
@@ -53,12 +69,14 @@ function createWindow(): BrowserWindow {
   } else {
     void win.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+  setMainWindow(win)
   return win
 }
 
 app.whenReady().then(() => {
   if (app.isPackaged) Menu.setApplicationMenu(null)
   createWindow()
+  createTray()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

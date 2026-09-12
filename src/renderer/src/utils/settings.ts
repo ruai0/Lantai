@@ -53,3 +53,17 @@ export async function clearHistory(): Promise<void> {
 }
 
 export const defaultOutDir = computed(() => settings.value.defaultOutDir)
+export const favorites = computed(() => settings.value.favorites)
+
+export function isFavorite(path: string): boolean {
+  return settings.value.favorites.includes(path)
+}
+
+/** 切换收藏，返回切换后的状态 */
+export async function toggleFavorite(path: string): Promise<boolean> {
+  const cur = settings.value.favorites
+  const on = cur.includes(path)
+  const next = on ? cur.filter(p => p !== path) : [...cur, path]
+  await updateSettings({ favorites: next })
+  return !on
+}

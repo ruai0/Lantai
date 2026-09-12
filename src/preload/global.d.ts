@@ -109,6 +109,8 @@ export interface FreeToolApi {
   getHistory(): Promise<ApiResult<HistoryEntry[]>>
   addHistory(entry: HistoryEntry): Promise<ApiResult<HistoryEntry[]>>
   clearHistory(): Promise<ApiResult<HistoryEntry[]>>
+  notify(p: { title: string; body: string }): Promise<ApiResult<boolean>>
+  diagnostics(): Promise<ApiResult<Record<string, string | number>>>
 }
 
 declare global {

@@ -1,59 +1,41 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  Connection,
-  CopyDocument,
-  Document,
-  EditPen,
-  Files,
-  FolderChecked,
-  Grid,
-  HomeFilled,
-  Picture,
-  Promotion,
-  Search,
-  Setting
-} from '@element-plus/icons-vue'
+import { HomeFilled, Search, Setting } from '@element-plus/icons-vue'
+import CommandPalette from './components/CommandPalette.vue'
+import { groupedTools, toolByPath, type ToolDef } from './tools'
+import { favorites } from './utils/settings'
 
 const route = useRoute()
 const active = computed(() => route.path)
 
-const groups = [
-  {
-    title: '工作台',
-    items: [{ path: '/', label: '总览', icon: HomeFilled }]
-  },
-  {
-    title: '文档与 PDF',
-    items: [
-      { path: '/pdf', label: 'PDF 工具', icon: Document },
-      { path: '/image', label: '图片工具', icon: Picture },
-      { path: '/convert', label: '转 PDF', icon: Promotion },
-      { path: '/office', label: '文档模板', icon: Files },
-      { path: '/replace', label: '批量替换', icon: Search }
-    ]
-  },
-  {
-    title: '表格与数据',
-    items: [
-      { path: '/excel', label: 'Excel 工具', icon: Grid },
-      { path: '/match', label: '匹配与比对', icon: Connection }
-    ]
-  },
-  {
-    title: '文件与效率',
-    items: [
-      { path: '/rename', label: '批量重命名', icon: EditPen },
-      { path: '/filekit', label: '文件管理', icon: FolderChecked },
-      { path: '/tools', label: '常用小工具', icon: CopyDocument }
-    ]
-  },
-  {
-    title: '系统',
-    items: [{ path: '/settings', label: '设置', icon: Setting }]
+const paletteOpen = ref(false)
+
+interface NavGroup {
+  title: string
+  items: Array<{ path: string; label: string; icon: ToolDef['icon'] | typeof HomeFilled }>
+}
+
+const toolGroups = computed<NavGroup[]>(() =>
+  groupedTools().map(g => ({ title: g.title, items: g.tools.map(t => ({ path: t.path, label: t.name, icon: t.icon })) }))
+)
+
+const favGroup = computed<NavGroup | null>(() => {
+  const items = favorites.value
+    .map(p => toolByPath(p))
+    .filter((t): t is ToolDef => !!t)
+    .map(t => ({ path: t.path, label: t.name, icon: t.icon }))
+  return items.length ? { title: '收藏', items } : null
+})
+
+function onGlobalKey(e: KeyboardEvent): void {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
   }
-]
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
 
 <template>
@@ -67,11 +49,38 @@ const groups = [
         </div>
       </div>
 
+      <div class="rail-search" @click="paletteOpen = true">
+        <el-icon><Search /></el-icon>
+        <span>搜索工具 / 命令</span>
+        <kbd>Ctrl K</kbd>
+      </div>
+
       <el-menu router :default-active="active" class="app-menu">
-        <el-menu-item-group v-for="g in groups" :key="g.title" :title="g.title">
+        <el-menu-item-group title="工作台">
+          <el-menu-item index="/">
+            <el-icon><HomeFilled /></el-icon>
+            <span>总览</span>
+          </el-menu-item>
+        </el-menu-item-group>
+
+        <el-menu-item-group v-if="favGroup" :title="favGroup.title">
+          <el-menu-item v-for="m in favGroup.items" :key="m.path" :index="m.path">
+            <el-icon><component :is="m.icon" /></el-icon>
+            <span>{{ m.label }}</span>
+          </el-menu-item>
+        </el-menu-item-group>
+
+        <el-menu-item-group v-for="g in toolGroups" :key="g.title" :title="g.title">
           <el-menu-item v-for="m in g.items" :key="m.path" :index="m.path">
             <el-icon><component :is="m.icon" /></el-icon>
             <span>{{ m.label }}</span>
+          </el-menu-item>
+        </el-menu-item-group>
+
+        <el-menu-item-group title="系统">
+          <el-menu-item index="/settings">
+            <el-icon><Setting /></el-icon>
+            <span>设置</span>
           </el-menu-item>
         </el-menu-item-group>
       </el-menu>
@@ -87,6 +96,8 @@ const groups = [
         <router-view />
       </div>
     </el-main>
+
+    <CommandPalette v-model="paletteOpen" />
   </el-container>
 </template>
 
@@ -94,5 +105,31 @@ const groups = [
 .brand {
   cursor: pointer;
   user-select: none;
+}
+.rail-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 12px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--rail-line);
+  border-radius: var(--r-md);
+  color: var(--rail-text);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.rail-search:hover {
+  border-color: rgba(242, 167, 59, 0.5);
+  color: var(--rail-text-hi);
+}
+.rail-search kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--rail-text);
+  border: 1px solid var(--rail-line);
+  border-radius: 4px;
+  padding: 1px 5px;
 }
 </style>

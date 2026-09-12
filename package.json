@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "description": "FreeTool 桌面办公工具箱：PDF / 图片 / Excel / 表格匹配比对 / Office转PDF / 批量替换 / 模板填充 / 文件管理 / 小工具",
   "main": "./out/main/index.js",
-  "author": "FreeTool",
+  "author": "ruai1024",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
@@ -14,11 +14,13 @@
     "test": "vitest run",
     "test:ui": "node scripts/ui-smoke.mjs",
     "dist": "electron-vite build && electron-builder",
+    "release": "node scripts/release.mjs",
     "gen:icon": "node scripts/make-icon.mjs"
   },
   "build": {
     "appId": "com.freetool.officebox",
     "productName": "FreeTool",
+    "copyright": "Copyright © 2026 ruai1024",
     "compression": "maximum",
     "electronLanguages": [
       "zh-CN",
@@ -31,6 +33,13 @@
       "out/**",
       "!**/node_modules/**/*.{md,map,d.ts,ts}"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ruai1024",
+        "repo": "freeTool"
+      }
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [
@@ -41,12 +50,22 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "shortcutName": "FreeTool",
+      "uninstallDisplayName": "FreeTool 办公工具箱",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "artifactName": "freetool-setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "freetool-portable-${version}.${ext}"
     }
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "docxtemplater": "^3.69.3",
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "iconv-lite": "^0.7.3",
     "jsqr": "^1.4.0",

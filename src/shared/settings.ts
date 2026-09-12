@@ -13,6 +13,8 @@ export interface AppSettings {
   notify: boolean
   /** 收藏的工具路由 path（首页置顶 + 侧栏收藏分组） */
   favorites: string[]
+  /** 更新源根地址（latest.yml 所在目录，http/https）；留空 = 关闭一切更新行为 */
+  updateFeed: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -20,7 +22,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onComplete: 'notify',
   theme: 'light',
   notify: true,
-  favorites: []
+  favorites: [],
+  updateFeed: ''
 }
 
 /** 归一化：缺字段补默认、非法枚举回退，兼容旧配置文件 */
@@ -33,7 +36,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     onComplete,
     theme,
     notify: s.notify !== false,
-    favorites: Array.isArray(s.favorites) ? s.favorites.filter((x): x is string => typeof x === 'string') : []
+    favorites: Array.isArray(s.favorites) ? s.favorites.filter((x): x is string => typeof x === 'string') : [],
+    updateFeed: typeof s.updateFeed === 'string' ? s.updateFeed : ''
   }
 }
 

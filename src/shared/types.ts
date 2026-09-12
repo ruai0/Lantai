@@ -513,3 +513,16 @@ export interface UndoResult {
   skipped: number
   failed: Array<{ path: string; reason: string }>
 }
+
+/** 自动更新状态（electron-updater 展平后的可序列化视图，主→渲染推送 update:state） */
+export interface UpdateState {
+  phase: 'idle' | 'checking' | 'not-available' | 'available' | 'downloading' | 'ready' | 'error'
+  current: string
+  /** 最新版本的版本号 */
+  latest?: string
+  /** 更新说明（latest.yml releaseNotes） */
+  notes?: string
+  /** downloading 阶段百分比 */
+  percent?: number
+  error?: string
+}

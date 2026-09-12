@@ -1,14 +1,41 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { HomeFilled, Search, Setting } from '@element-plus/icons-vue'
 import CommandPalette from './components/CommandPalette.vue'
 import TaskDock from './components/TaskDock.vue'
 import { groupedTools, toolByPath, type ToolDef } from './tools'
 import { favorites } from './utils/settings'
+import { api } from './utils/ipc'
+import { syncUpdateState, updateState } from './utils/update'
 
 const route = useRoute()
+const router = useRouter()
 const active = computed(() => route.path)
+
+const appVersion = ref('')
+onMounted(() => {
+  void api.getVersion().then(r => {
+    if (r.ok) appVersion.value = r.data
+  })
+  void syncUpdateState()
+})
+
+watch(
+  () => updateState.value.phase,
+  phase => {
+    if (phase !== 'ready') return
+    const latest = updateState.value.latest ?? ''
+    ElNotification({
+      title: `新版本 v${latest} 已就绪`,
+      message: '点击打开设置 → 软件更新，重启安装',
+      type: 'success',
+      duration: 0,
+      onClick: () => void router.push('/settings')
+    })
+  }
+)
 
 const paletteOpen = ref(false)
 
@@ -89,7 +116,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       <div class="rail-status">
         <i class="pulse" />
         <span>本机离线处理</span>
-        <span class="rail-ver">v0.5</span>
+        <span class="rail-ver">v{{ appVersion }}</span>
       </div>
     </el-aside>
     <el-main class="app-main">

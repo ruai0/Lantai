@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, FolderChecked, Setting } from '@element-plus/icons-vue'
 import StepCard from '../components/StepCard.vue'
 import { basename } from '../utils/api'
 import { clearHistory, history, settings, updateSettings } from '../utils/settings'
+import { checkUpdate, installUpdate, syncUpdateState, updateState } from '../utils/update'
 import type { EnvProbe } from '@shared/types'
 import type { OnComplete, Theme } from '@shared/settings'
 
@@ -24,10 +25,59 @@ async function loadProbe(force = false) {
   }
 }
 
+/* ---------- 软件更新 ---------- */
+
+const feedInput = ref('')
+const checking = ref(false)
+const installing = ref(false)
+
 onMounted(async () => {
   const v = await api.getVersion()
   if (v.ok) version.value = v.data
+  feedInput.value = settings.value.updateFeed
   void loadProbe()
+  void syncUpdateState()
+})
+
+async function saveFeed() {
+  await updateSettings({ updateFeed: feedInput.value.trim() })
+}
+
+async function runCheck() {
+  checking.value = true
+  try {
+    await checkUpdate()
+  } finally {
+    checking.value = false
+  }
+}
+
+async function runInstall() {
+  installing.value = true
+  try {
+    await installUpdate()
+  } catch {
+    installing.value = false
+  }
+}
+
+const updateStatus = computed(() => {
+  const s = updateState.value
+  switch (s.phase) {
+    case 'checking':
+      return { type: 'info' as const, text: '正在检查更新…' }
+    case 'not-available':
+      return { type: 'success' as const, text: `已是最新版本 v${s.current}` }
+    case 'available':
+    case 'downloading':
+      return { type: 'warning' as const, text: `发现 v${s.latest}，下载中 ${s.percent ?? 0}%` }
+    case 'ready':
+      return { type: 'success' as const, text: `v${s.latest} 已下载完成，重启后生效` }
+    case 'error':
+      return { type: 'danger' as const, text: s.error || '更新失败' }
+    default:
+      return { type: 'info' as const, text: s.error ?? '尚未检查' }
+  }
 })
 
 async function pickDefaultDir() {
@@ -169,6 +219,30 @@ function fmtTime(t: number): string {
         </el-table-column>
       </el-table>
       <el-empty v-else description="还没有产出记录" :image-size="60" />
+    </StepCard>
+
+    <StepCard :step="6" title="软件更新">
+      <div class="outdir-row">
+        <el-input
+          v-model="feedInput"
+          placeholder="更新源地址，如 https://dl.example.com/freetool 或 https://github.com/ruai1024/freetool（留空 = 永不检查）"
+          clearable
+          @change="saveFeed"
+        />
+        <el-button type="primary" plain :loading="checking" @click="runCheck">检查更新</el-button>
+        <el-button v-if="updateState.phase === 'ready'" type="success" :loading="installing" @click="runInstall">
+          重启并安装
+        </el-button>
+      </div>
+      <p class="hint">
+        当前版本 v{{ version }} ·
+        <el-tag :type="updateStatus.type" size="small">{{ updateStatus.text }}</el-tag>
+      </p>
+      <p v-if="updateState.notes" class="hint" style="white-space: pre-wrap">{{ updateState.notes }}</p>
+      <p class="hint">
+        更新源指向存放 latest.yml + 安装包的目录（自建静态服务或 GitHub Releases 仓库主页均可）。未配置时应用不会发起任何网络请求；
+        安装包未做代码签名，升级包完整性由 SHA-512 校验。
+      </p>
     </StepCard>
 
     <div class="about">

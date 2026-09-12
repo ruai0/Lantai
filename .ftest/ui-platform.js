@@ -53,5 +53,14 @@
   const both = await Promise.all([m1, m2])
   res.mergedTwice = both.every(r => r.ok && r.data.outputs.length === 1)
 
+  // ── 软件更新：update:state 通道 + 设置页更新卡片渲染 ────────────────
+  const us = await window.api.updateState()
+  res.updateStateOk = !!(us.ok && typeof us.data.current === 'string')
+  const uc = await window.api.updateCheck()
+  res.updateCheckOk = !!uc.ok // 开发环境返回 idle+提示，不算错误
+  if (!(await __Z.nav('#/settings', 'version'))) return { fail: 'SettingsView 未挂载' }
+  await new Promise(r => setTimeout(r, 300))
+  res.updateCardShown = document.body.textContent.includes('软件更新')
+
   return res
 })()

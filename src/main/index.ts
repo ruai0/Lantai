@@ -4,6 +4,7 @@ import './ipc'
 import { installCrashLogging, logMain } from './services/log'
 import { clampToDisplays, loadWindowState, watchWindowState } from './services/windowState'
 import { focusMainWindow, setMainWindow } from './mainWindow'
+import { initAutoUpdater } from './ipc/update'
 
 installCrashLogging()
 
@@ -77,6 +78,7 @@ app.whenReady().then(() => {
   if (app.isPackaged) Menu.setApplicationMenu(null)
   createWindow()
   createTray()
+  initAutoUpdater()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

@@ -68,6 +68,15 @@ const api = {
     const listener = (_e: unknown, list: unknown[]): void => cb(list)
     ipcRenderer.on('task:update', listener)
     return () => ipcRenderer.removeListener('task:update', listener)
+  },
+  updateCheck: () => invoke('update:check'),
+  updateInstall: () => invoke('update:install'),
+  updateState: () => invoke('update:state'),
+  /** 订阅更新状态推送；返回取消订阅函数 */
+  onUpdateState: (cb: (state: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, s: unknown): void => cb(s)
+    ipcRenderer.on('update:state', listener)
+    return () => ipcRenderer.removeListener('update:state', listener)
   }
 }
 

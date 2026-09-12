@@ -35,8 +35,19 @@ const SCENARIOS = [
   },
   {
     file: 'ui-platform.js',
-    name: '任务进度/环境探测/拖目录/撤销',
-    check: r => r.expandOk && r.probeOk && r.diagHasProbe && r.undoRound && r.progressSeen && r.dockShown && r.zipOk && r.mergedTwice
+    name: '任务进度/环境探测/拖目录/撤销/更新',
+    check: r =>
+      r.expandOk &&
+      r.probeOk &&
+      r.diagHasProbe &&
+      r.undoRound &&
+      r.progressSeen &&
+      r.dockShown &&
+      r.zipOk &&
+      r.mergedTwice &&
+      r.updateStateOk &&
+      r.updateCheckOk &&
+      r.updateCardShown
   },
   {
     file: 'ui-settings.js',

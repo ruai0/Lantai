@@ -60,7 +60,8 @@ import type {
   TaskSnapshot,
   UndoKind,
   UndoResult,
-  UndoState
+  UndoState,
+  UpdateState
 } from '../shared/types'
 import type { AppSettings, HistoryEntry } from '../shared/settings'
 
@@ -125,6 +126,11 @@ export interface FreeToolApi {
   undoState(): Promise<ApiResult<Record<UndoKind, UndoState | null>>>
   /** 订阅主进程任务进度推送；返回取消订阅函数 */
   onTaskUpdate(cb: (list: TaskSnapshot[]) => void): () => void
+  updateCheck(): Promise<ApiResult<UpdateState>>
+  updateInstall(): Promise<ApiResult<boolean>>
+  updateState(): Promise<ApiResult<UpdateState>>
+  /** 订阅更新状态推送；返回取消订阅函数 */
+  onUpdateState(cb: (state: UpdateState) => void): () => void
 }
 
 declare global {

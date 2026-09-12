@@ -138,9 +138,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       </el-menu>
 
       <div class="rail-status">
-        <i class="pulse" />
-        <span>本机离线处理</span>
-        <span class="rail-ver">v{{ appVersion }} · by ruai0</span>
+        <span class="rail-ver">兰台 v{{ appVersion }} · by ruai0</span>
       </div>
     </el-aside>
     <el-main class="app-main">

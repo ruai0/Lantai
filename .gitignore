@@ -4,3 +4,6 @@ release*/
 dist/
 *.log
 .DS_Store
+.ftest/out/
+.ftest/ui-smoke-last.json
+.ftest/ui-smoke-app.log

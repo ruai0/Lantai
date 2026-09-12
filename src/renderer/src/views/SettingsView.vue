@@ -280,7 +280,7 @@ function fmtTime(t: number): string {
       <el-icon><Setting /></el-icon>
       <span>兰台（Lantai）v{{ version }}</span>
       <span class="about-dot">·</span>
-      <span>© 2026 <b>ruai0</b> · 免费非商用（详见 LICENSE）</span>
+      <span>© 2026 <b>ruai0</b> · 个人免费，单位使用需授权（详见 LICENSE）</span>
       <span class="about-dot">·</span>
       <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
       <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>

@@ -7,7 +7,7 @@
     <a href="https://github.com/ruai0/Lantai/releases/latest"><img src="https://img.shields.io/github/v/release/ruai0/Lantai?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=F2A73B" alt="release"/></a>
     <a href="https://github.com/ruai0/Lantai/releases"><img src="https://img.shields.io/github/downloads/ruai0/Lantai/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F" alt="downloads"/></a>
     <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%2B%20x64-1b2a41" alt="platform"/>
-    <a href="./LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E5%85%8D%E8%B4%B9%E9%9D%9E%E5%95%86%E7%94%A8-2f855a" alt="license"/></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E4%B8%AA%E4%BA%BA%E5%85%8D%E8%B4%B9%C2%B7%E5%8D%95%E4%BD%8D%E6%8E%88%E6%9D%83-2f855a" alt="license"/></a>
   </p>
 </div>
 
@@ -19,7 +19,7 @@
 
 ## 为什么选它
 
-- **隐私即底线**：全部处理在本机完成，无账号、无遥测、不配置更新源时零网络请求，内网与涉密环境可直接部署。
+- **隐私即底线**：全部处理在本机完成，无账号、无遥测、不配置更新源时零网络请求，内网与涉密环境技术上完全可用（单位部署请获取授权，见「许可」）。
 - **为批量而生**：合并几百页 PDF、整目录转格式、多表匹配比对，都是「选文件 → 执行」一步到位；重活有后台队列与进度，跑着也能切去干别的。
 - **免安装也便携**：NSIS 安装版（自动更新）与单文件便携版任选，U 盘即插即用。
 
@@ -90,6 +90,6 @@ npm run release 0.6.2   # 一键发版（云端构建）
 
 ## 许可与反馈
 
-- 许可：**免费非商用**（[LICENSE](LICENSE)）——个人学习研究与单位内部办公使用、修改、分发均免费；商业销售/捆绑/服务化需作者书面授权。
+- 许可：**个人免费、单位授权**（[LICENSE](LICENSE)）——个人学习研究与个人事务使用免费；任何单位（企业/政府/事业单位等）部署、使用、修改或分发，**包括内部办公用途**，均需事先获得作者书面授权。
 - 反馈：提 [Issue](https://github.com/ruai0/Lantai/issues)，或应用内「设置 → 复制诊断信息」一键带上环境与日志。
 - 作者：[ruai0](https://github.com/ruai0) · 设计文档见 [docs/](docs/)

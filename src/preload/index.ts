@@ -60,6 +60,17 @@ const api = {
   notify: (p: unknown) => invoke('app:notify', p),
   openExternal: (url: string) => invoke('shell:open-external', url),
   toggleDevtools: () => invoke('app:toggle-devtools'),
+  devInfo: () => invoke('app:devinfo'),
+  openUserData: () => invoke('app:open-userdata'),
+  relaunchApp: () => invoke('app:relaunch'),
+  resetSettings: () => invoke('app:reset-settings'),
+  /** 关闭询问：渲染层弹选择框，用户点完把结果送回主进程执行 */
+  applyCloseChoice: (p: unknown) => invoke('app:apply-close-choice', p),
+  onWindowCloseRequest: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('app:close-request', listener)
+    return () => ipcRenderer.removeListener('app:close-request', listener)
+  },
   diagnostics: () => invoke('app:diagnostics'),
   probe: (p?: unknown) => invoke('app:probe', p),
   expandPaths: (p: unknown) => invoke('file:expand-paths', p),

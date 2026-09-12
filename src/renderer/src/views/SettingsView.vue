@@ -8,7 +8,7 @@ import { basename } from '../utils/api'
 import { clearHistory, history, settings, updateSettings } from '../utils/settings'
 import { checkUpdate, installUpdate, syncUpdateState, updateState } from '../utils/update'
 import type { EnvProbe } from '@shared/types'
-import type { OnComplete, Theme } from '@shared/settings'
+import type { OnClose, OnComplete, Theme } from '@shared/settings'
 
 const version = ref('')
 const loadingDir = ref(false)
@@ -106,8 +106,8 @@ async function toggleNotify(v: boolean | string | number) {
   await updateSettings({ notify: v === true })
 }
 
-async function toggleTrayClose(v: boolean | string | number) {
-  await updateSettings({ minimizeToTray: v === true })
+async function chooseClose(v: string | number | boolean) {
+  await updateSettings({ onClose: v as OnClose })
 }
 
 function openRepo() {
@@ -161,21 +161,25 @@ function fmtTime(t: number): string {
       <p class="hint">设置后，各功能的输出框会自动预填此目录（仍可临时改）。</p>
     </StepCard>
 
-    <StepCard :step="2" title="任务完成后">
+    <StepCard :step="2" title="完成与关闭行为">
       <el-radio-group :model-value="settings.onComplete" @change="chooseComplete">
-        <el-radio-button value="notify">仅提示</el-radio-button>
+        <el-radio-button value="notify">任务完成仅提示</el-radio-button>
         <el-radio-button value="openFolder">打开所在文件夹</el-radio-button>
         <el-radio-button value="openFile">打开输出文件</el-radio-button>
       </el-radio-group>
-      <p class="hint">统一所有导出/转换类操作完成后的行为。</p>
       <div class="notify-row">
         <span>窗口不在前台时，任务完成弹系统通知</span>
         <el-switch :model-value="settings.notify" @change="toggleNotify" />
       </div>
       <div class="notify-row">
-        <span>点关闭按钮时收进右下角托盘（不退出，右键托盘图标可选「退出」）</span>
-        <el-switch :model-value="settings.minimizeToTray" @change="toggleTrayClose" />
+        <span>点右上角关闭按钮时</span>
+        <el-radio-group :model-value="settings.onClose" size="small" @change="chooseClose">
+          <el-radio-button value="ask">每次询问</el-radio-button>
+          <el-radio-button value="tray">收进托盘</el-radio-button>
+          <el-radio-button value="quit">直接退出</el-radio-button>
+        </el-radio-group>
       </div>
+      <p class="hint">收进托盘后应用继续常驻右下角：单击图标恢复，右键菜单可「检查更新 / 退出 兰台」。</p>
     </StepCard>
 
     <StepCard :step="3" title="外观">
@@ -202,7 +206,10 @@ function fmtTime(t: number): string {
         </div>
       </div>
       <p v-else class="hint">{{ probing ? '正在探测本机 Office/WPS 组件与字体…' : '尚未探测。' }}</p>
-      <p class="hint">「Office 转 PDF」与「PDF 中文水印」依赖以上环境；内网装机验收时先看这里，报错时也请连诊断信息一起反馈。</p>
+      <p class="hint">
+        这里显示本机装了什么文档引擎：「Office 转 PDF」需要 Word/Excel/PPT 任一为 Microsoft 或 WPS；
+        「PDF 中文水印」需要中文字体（缺字体时只能加英文水印）。显示「未检测到」则该功能在这台机器上会报错，装好对应软件后回来点「重新探测」。
+      </p>
     </StepCard>
 
     <StepCard :step="5" title="使用历史">
@@ -258,7 +265,7 @@ function fmtTime(t: number): string {
       <el-icon><Setting /></el-icon>
       <span>兰台（Lantai）v{{ version }}</span>
       <span class="about-dot">·</span>
-      <span>© 2026 <b>ruai1024</b> · MIT License</span>
+      <span>© 2026 <b>ruai0</b> · MIT License</span>
       <span class="about-dot">·</span>
       <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
       <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>

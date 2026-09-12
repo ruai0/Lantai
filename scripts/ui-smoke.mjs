@@ -50,9 +50,14 @@ const SCENARIOS = [
       r.updateCardShown &&
       r.authorShown &&
       r.debugOpened &&
+      r.debugOpsTab &&
       r.debugClosed &&
+      r.devInfoOk &&
       r.diagHasFeed &&
-      r.traySwitchShown
+      r.closeModeShown &&
+      r.welcomeShown &&
+      r.welcomeGone &&
+      r.welcomePersisted
   },
   {
     file: 'ui-settings.js',

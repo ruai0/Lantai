@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Notification } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { NsisUpdater, UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '@shared/types'
@@ -18,6 +18,25 @@ import { logMain } from '../services/log'
 export const DEFAULT_UPDATE_FEED = 'https://github.com/ruai0/Lantai'
 
 let state: UpdateState = { phase: 'idle', current: app.getVersion() }
+/** 托盘「检查更新」触发的轮次：结果额外弹系统 toast（窗口此刻多半没在前台） */
+let toastOnResult = false
+
+function toast(title: string, body: string): void {
+  if (!Notification.isSupported()) return
+  const n = new Notification({ title, body })
+  n.on('click', () => {
+    for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.show()
+  })
+  n.show()
+}
+
+/** 托盘菜单入口：检查结果以 toast 反馈 */
+export function trayCheckForUpdates(): void {
+  if (!app.isPackaged) return toast('兰台', '开发环境不检查更新')
+  if (!applyFeed()) return toast('兰台 · 更新', '更新源被禁用（设置为 off）或地址无效')
+  toastOnResult = true
+  void autoUpdater.checkForUpdates().catch(() => {})
+}
 
 function push(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -67,15 +86,29 @@ export function initAutoUpdater(): void {
 
   autoUpdater.on('checking-for-update', () => setState({ phase: 'checking' }))
   autoUpdater.on('update-available', info => setState({ phase: 'available', latest: info.version, notes: notesOf(info) }))
-  autoUpdater.on('update-not-available', info => setState({ phase: 'not-available', latest: info.version }))
+  autoUpdater.on('update-not-available', info => {
+    setState({ phase: 'not-available', latest: info.version })
+    if (toastOnResult) {
+      toastOnResult = false
+      toast('兰台 · 更新', `已是最新版本 v${info.version}`)
+    }
+  })
   autoUpdater.on('download-progress', p => setState({ phase: 'downloading', percent: Math.round(p.percent) }))
   autoUpdater.on('update-downloaded', info => {
     setState({ phase: 'ready', latest: info.version, notes: notesOf(info) })
     logMain('info', `更新包已下载：${info.version}`)
+    if (toastOnResult) {
+      toastOnResult = false
+      toast(`v${info.version} 已就绪`, '打开设置 → 软件更新，点「重启并安装」')
+    }
   })
   autoUpdater.on('error', e => {
     setState({ phase: 'error', error: e.message })
     logMain('warn', `更新失败：${e.message}`)
+    if (toastOnResult) {
+      toastOnResult = false
+      toast('兰台 · 更新失败', e.message.slice(0, 120))
+    }
   })
 
   // 启动静默检查（5s 后避开冷启动）；走内置官方源或用户配置的镜像地址

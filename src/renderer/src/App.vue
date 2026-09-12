@@ -6,8 +6,10 @@ import { HomeFilled, Search, Setting } from '@element-plus/icons-vue'
 import CommandPalette from './components/CommandPalette.vue'
 import TaskDock from './components/TaskDock.vue'
 import DebugDialog from './components/DebugDialog.vue'
+import CloseChoiceDialog from './components/CloseChoiceDialog.vue'
+import WelcomeDialog from './components/WelcomeDialog.vue'
 import { groupedTools, toolByPath, type ToolDef } from './tools'
-import { favorites } from './utils/settings'
+import { favorites, settings } from './utils/settings'
 import { api } from './utils/ipc'
 import { syncUpdateState, updateState } from './utils/update'
 
@@ -40,9 +42,10 @@ watch(
 
 const paletteOpen = ref(false)
 const debugOpen = ref(false)
+const closeChoiceOpen = ref(false)
 
-/** 隐藏调试口令：任意处（非输入框）连续键入 lantai 弹出调试面板 */
-const SECRET = 'lantai'
+/** 隐藏调试口令：任意处（非输入框）连续键入 xiaoruai 弹出调试面板 */
+const SECRET = 'xiaoruai'
 let secretBuf = ''
 
 function onGlobalKey(e: KeyboardEvent): void {
@@ -80,6 +83,10 @@ const favGroup = computed<NavGroup | null>(() => {
 })
 
 onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onMounted(() => {
+  const off = api.onWindowCloseRequest(() => (closeChoiceOpen.value = true))
+  onBeforeUnmount(off)
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
 
@@ -133,7 +140,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       <div class="rail-status">
         <i class="pulse" />
         <span>本机离线处理</span>
-        <span class="rail-ver">v{{ appVersion }} · by ruai1024</span>
+        <span class="rail-ver">v{{ appVersion }} · by ruai0</span>
       </div>
     </el-aside>
     <el-main class="app-main">
@@ -145,6 +152,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
     <CommandPalette v-model="paletteOpen" />
     <TaskDock />
     <DebugDialog v-model="debugOpen" />
+    <CloseChoiceDialog v-model="closeChoiceOpen" />
+    <WelcomeDialog v-if="!settings.onboarded && appVersion" />
   </el-container>
 </template>
 

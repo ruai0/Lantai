@@ -2,6 +2,8 @@
 
 export type OnComplete = 'notify' | 'openFolder' | 'openFile'
 export type Theme = 'light' | 'dark' | 'system'
+/** 点关闭按钮的行为：每次询问 / 收进托盘 / 直接退出 */
+export type OnClose = 'ask' | 'tray' | 'quit'
 
 export interface AppSettings {
   /** 默认输出目录；各功能输出框为空时自动预填 */
@@ -15,8 +17,10 @@ export interface AppSettings {
   favorites: string[]
   /** 更新源地址（latest.yml 所在目录，http/https）；留空 = 使用内置官方源，填 off = 彻底禁用 */
   updateFeed: string
-  /** 点关闭按钮时收进托盘而不是退出应用 */
-  minimizeToTray: boolean
+  /** 关闭主窗口时：询问 / 最小化到托盘 / 退出应用 */
+  onClose: OnClose
+  /** 新用户首次启动的步骤指引是否已完成 */
+  onboarded: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,14 +30,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notify: true,
   favorites: [],
   updateFeed: '',
-  minimizeToTray: true
+  onClose: 'ask',
+  onboarded: false
 }
 
 /** 归一化：缺字段补默认、非法枚举回退，兼容旧配置文件 */
 export function normalizeSettings(raw: unknown): AppSettings {
-  const s = (raw ?? {}) as Partial<AppSettings>
+  const s = (raw ?? {}) as Partial<AppSettings> & { minimizeToTray?: unknown }
   const onComplete = s.onComplete === 'openFolder' || s.onComplete === 'openFile' ? s.onComplete : 'notify'
   const theme = s.theme === 'dark' || s.theme === 'system' ? s.theme : 'light'
+  // 旧版布尔开关迁移：minimizeToTray true→tray / false→quit；都没有则默认「询问」
+  const onClose: OnClose =
+    s.onClose === 'ask' || s.onClose === 'tray' || s.onClose === 'quit'
+      ? s.onClose
+      : s.minimizeToTray === true
+        ? 'tray'
+        : s.minimizeToTray === false
+          ? 'quit'
+          : 'ask'
   return {
     defaultOutDir: typeof s.defaultOutDir === 'string' ? s.defaultOutDir : '',
     onComplete,
@@ -41,7 +55,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     notify: s.notify !== false,
     favorites: Array.isArray(s.favorites) ? s.favorites.filter((x): x is string => typeof x === 'string') : [],
     updateFeed: typeof s.updateFeed === 'string' ? s.updateFeed : '',
-    minimizeToTray: s.minimizeToTray !== false
+    onClose,
+    onboarded: s.onboarded === true
   }
 }
 

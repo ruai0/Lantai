@@ -23,9 +23,18 @@ describe('设置归一化 normalizeSettings', () => {
     expect(normalizeSettings({ updateFeed: null }).updateFeed).toBe('')
   })
 
-  it('minimizeToTray 默认开（旧配置无此字段 → true），显式 false 才退出', () => {
-    expect(DEFAULT_SETTINGS.minimizeToTray).toBe(true)
-    expect(normalizeSettings({}).minimizeToTray).toBe(true)
-    expect(normalizeSettings({ minimizeToTray: false }).minimizeToTray).toBe(false)
+  it('onClose 默认询问；旧版 minimizeToTray 布尔值自动迁移', () => {
+    expect(DEFAULT_SETTINGS.onClose).toBe('ask')
+    expect(normalizeSettings({}).onClose).toBe('ask')
+    expect(normalizeSettings({ minimizeToTray: true }).onClose).toBe('tray')
+    expect(normalizeSettings({ minimizeToTray: false }).onClose).toBe('quit')
+    expect(normalizeSettings({ onClose: 'quit', minimizeToTray: true }).onClose).toBe('quit')
+    expect(normalizeSettings({ onClose: 'bogus' }).onClose).toBe('ask')
+  })
+
+  it('onboarded 默认 false，仅显式 true 才跳过首启指引', () => {
+    expect(DEFAULT_SETTINGS.onboarded).toBe(false)
+    expect(normalizeSettings({ onboarded: true }).onboarded).toBe(true)
+    expect(normalizeSettings({ onboarded: 'yes' }).onboarded).toBe(false)
   })
 })

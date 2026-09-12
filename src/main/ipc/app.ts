@@ -6,6 +6,7 @@ import { handle } from './wrapper'
 import { focusMainWindow, getMainWindow } from '../mainWindow'
 import { getSettings } from '../services/settingsService'
 import { DEFAULT_UPDATE_FEED } from './update'
+import { quitApp } from '../quit'
 import { probeEnv } from '../services/envProbe'
 
 interface NotifyParams {
@@ -19,6 +20,18 @@ handle('app:notify', (p: NotifyParams): boolean => {
   const n = new Notification({ title: p.title, body: p.body, silent: false })
   n.on('click', () => focusMainWindow())
   n.show()
+  return true
+})
+
+/** 关闭询问对话框里用户点完按钮，渲染层把选择结果送回来执行 */
+handle('app:apply-close-choice', (p: { action: 'tray' | 'quit' }): boolean => {
+  const win = getMainWindow()
+  if (!win) return false
+  if (p.action === 'quit') {
+    quitApp()
+    return true
+  }
+  win.hide()
   return true
 })
 
@@ -89,3 +102,73 @@ handle('app:diagnostics', async (): Promise<Record<string, string | number>> => 
 
 /** 环境探测（设置页展示用）；force=true 忽略缓存重探 */
 handle('app:probe', (p?: { force?: boolean }) => probeEnv(!!p?.force))
+
+/* ---------- 调试面板专用（隐藏口令进入，勿接公开入口） ---------- */
+
+/** 运行时全量信息：原始设置、历史尾、主日志尾巴 */
+handle('app:devinfo', (): Record<string, string | number> => {
+  const dir = app.getPath('userData')
+  const read = (name: string): string => {
+    try {
+      return fs.readFileSync(path.join(dir, name), 'utf8')
+    } catch {
+      return '(无)'
+    }
+  }
+  let historyCount = 0
+  const histRaw = read('history.json')
+  try {
+    const h = JSON.parse(histRaw)
+    if (Array.isArray(h)) historyCount = h.length
+  } catch {
+    /* ignore */
+  }
+  let logTail = '(无日志)'
+  try {
+    const logDir = path.join(dir, 'logs')
+    const files = fs.readdirSync(logDir).filter(f => f.endsWith('.log')).sort()
+    const last = files[files.length - 1]
+    if (last) {
+      const lines = fs.readFileSync(path.join(logDir, last), 'utf8').split(/\r?\n/).filter(Boolean)
+      logTail = lines.slice(-150).join('\n')
+    }
+  } catch {
+    /* ignore */
+  }
+  return {
+    userData: dir,
+    settingsRaw: read('settings.json'),
+    historyCount,
+    historyRaw: histRaw.length > 6000 ? histRaw.slice(0, 6000) + '\n…(截断)' : histRaw,
+    logTail
+  }
+})
+
+/** 打开 userData 根目录（排障时直接看文件） */
+handle('app:open-userdata', async (): Promise<boolean> => {
+  const err = await shell.openPath(app.getPath('userData'))
+  if (err) throw new Error(err)
+  return true
+})
+
+/** 重启应用（app.exit 绕开 close→托盘 拦截） */
+handle('app:relaunch', () => {
+  app.relaunch()
+  app.exit(0)
+  return true
+})
+
+/** 清空偏好与历史后重启（排障核选项：日志与 journal 保留） */
+handle('app:reset-settings', () => {
+  const dir = app.getPath('userData')
+  for (const f of ['settings.json', 'history.json']) {
+    try {
+      fs.rmSync(path.join(dir, f), { force: true })
+    } catch {
+      /* ignore */
+    }
+  }
+  app.relaunch()
+  app.exit(0)
+  return true
+})

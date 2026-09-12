@@ -139,7 +139,7 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
     </section>
 
     <footer class="home-foot">
-      <span>兰台（Lantai）v{{ version }} · © 2026 <b>ruai1024</b> · MIT License</span>
+      <span>兰台（Lantai）v{{ version }} · © 2026 <b>ruai0</b> · MIT License</span>
       <a class="home-foot-link" title="项目主页" @click="openRepo">github.com/ruai0/Lantai ↗</a>
     </footer>
   </div>

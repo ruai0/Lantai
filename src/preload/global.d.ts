@@ -123,6 +123,15 @@ export interface LantaiApi {
   openExternal(url: string): Promise<ApiResult<boolean>>
   /** 开/关 DevTools（独立窗口），返回操作后的开启状态 */
   toggleDevtools(): Promise<ApiResult<boolean>>
+  /** 调试面板：原始设置 / 历史尾 / 主日志尾巴 */
+  devInfo(): Promise<ApiResult<Record<string, string | number>>>
+  openUserData(): Promise<ApiResult<boolean>>
+  relaunchApp(): Promise<ApiResult<boolean>>
+  resetSettings(): Promise<ApiResult<boolean>>
+  /** 关闭询问对话框的选择结果回传 */
+  applyCloseChoice(p: { action: 'tray' | 'quit' }): Promise<ApiResult<boolean>>
+  /** 订阅「用户点了关闭按钮且设置为询问」事件；返回取消订阅 */
+  onWindowCloseRequest(cb: () => void): () => void
   diagnostics(): Promise<ApiResult<Record<string, string | number>>>
   probe(p?: { force?: boolean }): Promise<ApiResult<EnvProbe>>
   expandPaths(p: { paths: string[]; exts?: string[]; max?: number }): Promise<ApiResult<ExpandPathsResult>>

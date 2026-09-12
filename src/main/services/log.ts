@@ -48,5 +48,5 @@ export function installCrashLogging(): void {
   process.on('unhandledRejection', reason => {
     logMain('error', `unhandledRejection: ${reason instanceof Error ? reason.stack : String(reason)}`)
   })
-  logMain('info', `FreeTool ${app.getVersion()} 启动（electron ${process.versions.electron}，${process.platform}）`)
+  logMain('info', `兰台 ${app.getVersion()} 启动（electron ${process.versions.electron}，${process.platform}）`)
 }

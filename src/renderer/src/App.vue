@@ -72,7 +72,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       <div class="brand" @click="$router.push('/')">
         <div class="brand-mark" />
         <div class="brand-text">
-          <div class="brand-word">FreeTool</div>
+          <div class="brand-word">兰台</div>
           <div class="brand-sub">办公工具箱</div>
         </div>
       </div>

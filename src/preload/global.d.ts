@@ -65,7 +65,7 @@ import type {
 } from '../shared/types'
 import type { AppSettings, HistoryEntry } from '../shared/settings'
 
-export interface FreeToolApi {
+export interface LantaiApi {
   /** 拖拽的 File → 绝对路径（同步，webUtils） */
   getPathForFile(file: File): string
   pickFiles(p?: PickFilesParams): Promise<ApiResult<string[]>>
@@ -135,7 +135,7 @@ export interface FreeToolApi {
 
 declare global {
   interface Window {
-    api: FreeToolApi
+    api: LantaiApi
   }
 }
 

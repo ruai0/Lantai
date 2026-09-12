@@ -27,10 +27,10 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
 <template>
   <div>
     <header class="hero">
-      <div class="hero-kicker">Offline Workstation · 本地文件处理</div>
-      <h1 class="hero-title">FreeTool</h1>
+      <div class="hero-kicker">Lantai · 本地文件处理</div>
+      <h1 class="hero-title">兰台</h1>
       <p class="hero-lead">
-        {{ total }} 组办公工具，覆盖 PDF、Office 文档、Excel 台账与日常文件整理。全部在本机完成，
+        兰台，汉代典籍藏书之所。{{ total }} 组办公工具覆盖 PDF、Office 文档、Excel 台账与日常文件整理。全部在本机完成，
         <b style="color: #f2a73b">文件不出电脑</b>，内网与涉密环境可直接使用。
       </p>
       <div class="hero-stats">

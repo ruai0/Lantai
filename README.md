@@ -1,6 +1,8 @@
-# FreeTool 办公工具箱
+# 兰台（Lantai）办公工具箱
 
 桌面级办公工具箱（Windows / Electron + Vue3 + TypeScript + Element Plus）。全部功能**离线本地处理**，文件不出电脑。
+
+> **为什么叫兰台**：兰台是汉代宫中藏书典籍之处，后世把档案机构雅称为兰台，档案系统至今自嘲「兰台人」。这个软件干的就是把散乱的文书、台账、报送材料整理归档的活——名字即职责。（原名 FreeTool，v0.5 后更名。）
 
 > **系统要求**：Windows 10 及以上、x64（Electron 44 不支持 Win7/8，旧系统安装后无法启动）。
 
@@ -42,9 +44,10 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 
 ## 运维与排障
 
-- 主进程日志落盘 `%APPDATA%/FreeTool/logs/main-YYYYMMDD.log`（启动记录 + 所有 IPC 业务异常 + 未捕获异常，超 5MB 自动轮转一份 .old）。用户报障先要这份文件。
+- 主进程日志落盘 `%APPDATA%/兰台/logs/main-YYYYMMDD.log`（启动记录 + 所有 IPC 业务异常 + 未捕获异常，超 5MB 自动轮转一份 .old）。用户报障先要这份文件。
 - 单实例：重复启动不会开第二个窗口，而是聚焦已有窗口。
-- 窗口尺寸/位置自动记忆（`%APPDATA%/FreeTool/window-state.json`），换显示器后旧坐标失效时自动回退居中。
+- 窗口尺寸/位置自动记忆（`%APPDATA%/兰台/window-state.json`），换显示器后旧坐标失效时自动回退居中。
+- 从 FreeTool 时代升级：首次启动自动把旧 `%APPDATA%/FreeTool`（或开发版 `%APPDATA%/freetool`）的设置、历史、窗口状态复制到新目录，旧数据保留不删。
 - 应用图标由 `npm run gen:icon` 生成（build/icon.png + icon.ico），设计语言与界面一致。
 
 ## 发布与更新
@@ -54,7 +57,7 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 ```bash
 # 1. 先在 CHANGELOG.md 写好 "## [0.6.0]" 段落并提交，工作区保持干净
 npm run release 0.6.0
-# 产物：release/freetool-setup-0.6.0.exe、freetool-portable-0.6.0.exe、latest.yml、*.blockmap、SHA256SUMS.txt
+# 产物：release/lantai-setup-0.6.0.exe、lantai-portable-0.6.0.exe、latest.yml、*.blockmap、SHA256SUMS.txt
 ```
 
 **更新源**：把上述产物上传到任一 **HTTP(S) 静态可访问**的位置即可——GitHub Releases（用户填 `https://github.com/<owner>/<repo>`）、内网 nginx/IIS 目录、网盘的直链镜像站均可。

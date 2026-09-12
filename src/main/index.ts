@@ -5,7 +5,11 @@ import { installCrashLogging, logMain } from './services/log'
 import { clampToDisplays, loadWindowState, watchWindowState } from './services/windowState'
 import { focusMainWindow, setMainWindow } from './mainWindow'
 import { initAutoUpdater } from './ipc/update'
+import { migrateLegacyUserData } from './services/migrate'
 
+// Windows 通知归属与 NSIS 快捷方式的 AUMID 保持一致（打包安装器写入的是 build.appId）
+app.setAppUserModelId('com.ruai1024.lantai')
+migrateLegacyUserData()
 installCrashLogging()
 
 let tray: Tray | null = null
@@ -22,7 +26,7 @@ function createTray(): void {
   try {
     const icon = nativeImage.createFromPath(path.join(__dirname, '../renderer/tray.png')).resize({ width: 16, height: 16 })
     tray = new Tray(icon)
-    tray.setToolTip('FreeTool 办公工具箱')
+    tray.setToolTip('兰台 办公工具箱')
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '显示主窗口', click: () => focusMainWindow() },
@@ -44,7 +48,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    title: 'FreeTool 办公工具箱',
+    title: '兰台 办公工具箱',
     backgroundColor: '#f5f7fa',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js')

@@ -116,7 +116,7 @@ async function copyDiagnostics() {
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n')
   try {
-    await navigator.clipboard.writeText(`FreeTool 诊断信息\n${text}`)
+    await navigator.clipboard.writeText(`兰台 诊断信息\n${text}`)
     ElMessage.success('诊断信息已复制，可直接发给技术支持')
   } catch {
     ElMessage.error('复制失败：剪贴板不可用，请截图或重试')
@@ -225,7 +225,7 @@ function fmtTime(t: number): string {
       <div class="outdir-row">
         <el-input
           v-model="feedInput"
-          placeholder="更新源地址，如 https://dl.example.com/freetool 或 https://github.com/ruai1024/freetool（留空 = 永不检查）"
+          placeholder="更新源地址，如 https://dl.example.com/lantai 或 https://github.com/ruai1024/lantai（留空 = 永不检查）"
           clearable
           @change="saveFeed"
         />
@@ -247,7 +247,7 @@ function fmtTime(t: number): string {
 
     <div class="about">
       <el-icon><Setting /></el-icon>
-      <span>FreeTool 办公工具箱 v{{ version }}</span>
+      <span>兰台 办公工具箱 v{{ version }}</span>
       <span class="about-dot">·</span>
       <span>本机离线处理，文件不出电脑</span>
       <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>

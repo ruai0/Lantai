@@ -1,5 +1,5 @@
 /* ============================================================
-   FreeTool · 精密仪器面板（Instrument Panel）
+   兰台（Lantai） · 精密仪器面板（Instrument Panel）
    墨蓝操作台 + 琥珀信号色；Bahnschrift 技术字做标题与编号
    仅重写全局样式层，功能页结构不变
    ============================================================ */
@@ -40,6 +40,8 @@
   --font-display: 'Bahnschrift', 'DIN Alternate', 'Segoe UI Variable Display', 'Microsoft YaHei', sans-serif;
   --font-body: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  /* 品牌/大标题专用：仿宋是公文正文字体，「兰台」二字配它才有文书档案的气质 */
+  --font-doc: 'FangSong', 'STFangsong', 'SimSun', serif;
 
   --r-sm: 4px;
   --r-md: 8px;
@@ -176,11 +178,10 @@ body {
   min-width: 0;
 }
 .brand-word {
-  font-family: var(--font-display);
-  font-stretch: 90%;
-  font-size: 17px;
+  font-family: var(--font-doc);
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.11em;
+  letter-spacing: 0.2em;
   color: var(--rail-text-hi);
   text-transform: uppercase;
 }
@@ -502,11 +503,10 @@ body {
   margin-bottom: 10px;
 }
 .hero-title {
-  font-family: var(--font-display);
-  font-stretch: 88%;
-  font-size: 40px;
+  font-family: var(--font-doc);
+  font-size: 44px;
   font-weight: 700;
-  letter-spacing: 0.045em;
+  letter-spacing: 0.14em;
   line-height: 1;
   margin: 0 0 12px;
   text-transform: uppercase;

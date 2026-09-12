@@ -82,4 +82,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('api', api)
 
-export type FreeToolApi = typeof api
+export type LantaiApi = typeof api

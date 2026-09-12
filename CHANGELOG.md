@@ -2,6 +2,16 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)；格式参考 Keep a Changelog。
 
+## [Unreleased]
+
+### 变更 — 品牌
+
+- **产品更名：FreeTool → 兰台（Lantai）**。兰台为汉代典籍藏书之所，档案系统雅称——与本产品「文书、台账、报送材料整理归档」的定位一致。
+- 更名波及：应用名 / 窗口标题 / 托盘 / 通知前缀 / appId（`com.ruai1024.lantai`）/ 安装器与卸载项显示名 / 产物命名（`lantai-setup-*.exe`、`lantai-portable-*.exe`）。
+- 可执行文件取 ASCII 名 `Lantai.exe`，规避中文安装路径在个别企业环境的兼容问题。
+- 数据目录随应用名变更为 `%APPDATA%\兰台`（开发版 `%APPDATA%\lantai`），**首次启动自动从旧 `%APPDATA%\FreeTool` 迁移**设置、历史与窗口状态，旧文件原样保留。
+- 品牌字（侧栏 logo、首页大标题）改用仿宋——公文正文字体，气质对齐「文书档案」。
+
 ## [0.5.0] - 2026-09-12
 
 ### 新增 — 平台层

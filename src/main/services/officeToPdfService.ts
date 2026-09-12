@@ -86,7 +86,7 @@ export async function officeToPdf(
     uniquePath(params.outDir, `${stemOf(p)}.pdf`)
   ])
   const script = buildScript(pairs)
-  const tmp = path.join(os.tmpdir(), `freetool_office2pdf_${Date.now()}.ps1`)
+  const tmp = path.join(os.tmpdir(), `lantai_office2pdf_${Date.now()}.ps1`)
   // PowerShell 5.1 默认按 ANSI 读 .ps1，加 UTF-8 BOM 保证中文路径不乱码
   await fs.promises.writeFile(tmp, '\ufeff' + script, 'utf-8')
 

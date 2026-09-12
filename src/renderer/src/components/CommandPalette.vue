@@ -35,6 +35,29 @@ const actions = computed<Cmd[]>(() => [
   { id: 'a-settings', label: '打开设置', hint: '偏好与历史', group: '操作', keywords: 'settings 设置 偏好', run: goto('/settings') },
   { id: 'a-home', label: '回到总览', hint: '首页', group: '操作', keywords: 'home 首页 总览', run: goto('/') },
   {
+    id: 'a-help',
+    label: '使用帮助 / 项目主页',
+    hint: '浏览器打开 GitHub 文档',
+    group: '操作',
+    keywords: 'help 帮助 文档 帮助手册 github 主页 反馈',
+    run: () => {
+      void api.openExternal('https://github.com/ruai0/Lantai#readme')
+      close()
+    }
+  },
+  {
+    id: 'a-logs',
+    label: '打开日志目录',
+    hint: '排障时把日志发给作者',
+    group: '操作',
+    keywords: 'log 日志 排障 报错 目录',
+    run: async () => {
+      const d = await api.diagnostics()
+      if (d.ok) void api.openPath(`${d.data.userData}/logs`)
+      close()
+    }
+  },
+  {
     id: 'a-theme',
     label: settings.value.theme === 'dark' ? '切换到浅色' : '切换到深色',
     hint: '外观',

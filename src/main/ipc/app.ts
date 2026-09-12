@@ -5,6 +5,7 @@ import path from 'node:path'
 import { handle } from './wrapper'
 import { focusMainWindow, getMainWindow } from '../mainWindow'
 import { getSettings } from '../services/settingsService'
+import { logMain } from '../services/log'
 import { DEFAULT_UPDATE_FEED } from './update'
 import { quitApp } from '../quit'
 import { probeEnv } from '../services/envProbe'
@@ -20,6 +21,12 @@ handle('app:notify', (p: NotifyParams): boolean => {
   const n = new Notification({ title: p.title, body: p.body, silent: false })
   n.on('click', () => focusMainWindow())
   n.show()
+  return true
+})
+
+/** 渲染层全局错误落主日志（Vue errorHandler / window.onerror / unhandledrejection 汇聚于此） */
+handle('app:log-error', (p: { where: string; message: string }): boolean => {
+  logMain('error', `渲染层错误[${p.where}]: ${String(p.message).slice(0, 2000)}`)
   return true
 })
 

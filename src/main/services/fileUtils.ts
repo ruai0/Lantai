@@ -5,8 +5,9 @@ import type { DataRecord } from '@shared/types'
 
 export { sanitizeFilename, resolveNamePattern } from '@shared/namePattern'
 
-/** 目录内重名时自动追加 (2)、(3)…，绝不覆盖已有文件 */
+/** 目录内重名时自动追加 (2)、(3)…，绝不覆盖已有文件；目录不存在则自动创建（输出目录被删/移动后任务不再裸抛 ENOENT） */
 export function uniquePath(dir: string, filename: string): string {
+  if (dir) fs.mkdirSync(dir, { recursive: true })
   const target = path.join(dir, filename)
   if (!fs.existsSync(target)) return target
   const ext = path.extname(filename)

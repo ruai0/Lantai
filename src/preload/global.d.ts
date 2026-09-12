@@ -130,6 +130,8 @@ export interface LantaiApi {
   resetSettings(): Promise<ApiResult<boolean>>
   /** 关闭询问对话框的选择结果回传 */
   applyCloseChoice(p: { action: 'tray' | 'quit' }): Promise<ApiResult<boolean>>
+  /** 渲染层错误上报主日志 */
+  logError(p: { where: string; message: string }): Promise<ApiResult<boolean>>
   /** 订阅「用户点了关闭按钮且设置为询问」事件；返回取消订阅 */
   onWindowCloseRequest(cb: () => void): () => void
   diagnostics(): Promise<ApiResult<Record<string, string | number>>>

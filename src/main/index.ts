@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
 import path from 'node:path'
 import './ipc'
 import { installCrashLogging, logMain } from './services/log'
@@ -93,9 +93,32 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  // 渲染进程崩溃/无响应留痕（内网排障唯一线索）
+  // 渲染进程崩溃自愈：先静默重载两次（偶发崩溃用户无感），仍崩则弹窗引导重启；全程留痕
+  let crashReloads = 0
   win.webContents.on('render-process-gone', (_e, details) => {
     logMain('error', `渲染进程退出: ${JSON.stringify(details)}`)
+    if (details.reason === 'clean-exit') return
+    if (crashReloads < 2) {
+      crashReloads++
+      logMain('info', `渲染进程崩溃，自动重载（第 ${crashReloads}/2 次）`)
+      win.webContents.reload()
+      return
+    }
+    void dialog
+      .showMessageBox(win, {
+        type: 'error',
+        title: '兰台',
+        message: '界面进程异常退出，自动恢复失败',
+        detail: '建议重启应用；若反复出现，请在「设置 → 复制诊断信息」后把内容发给作者 ruai0 排查。',
+        buttons: ['重启应用', '退出'],
+        noLink: true
+      })
+      .then(({ response }) => {
+        if (response === 0) {
+          app.relaunch()
+          app.exit(0)
+        } else app.quit()
+      })
   })
   win.on('unresponsive', () => logMain('warn', '窗口无响应'))
 

@@ -110,6 +110,10 @@ async function chooseClose(v: string | number | boolean) {
   await updateSettings({ onClose: v as OnClose })
 }
 
+async function toggleAutoStart(v: boolean | string | number) {
+  await updateSettings({ autoStart: v === true })
+}
+
 function openRepo() {
   void api.openExternal('https://github.com/ruai0/Lantai')
 }
@@ -178,6 +182,10 @@ function fmtTime(t: number): string {
           <el-radio-button value="tray">收进托盘</el-radio-button>
           <el-radio-button value="quit">直接退出</el-radio-button>
         </el-radio-group>
+      </div>
+      <div class="notify-row">
+        <span>开机自动启动（登录后常驻托盘待命）</span>
+        <el-switch :model-value="settings.autoStart" @change="toggleAutoStart" />
       </div>
       <p class="hint">收进托盘后应用继续常驻右下角：单击图标恢复，右键菜单可「检查更新 / 退出 兰台」。</p>
     </StepCard>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { activeTasks, currentLabel, pendingCount, queueActive } from '../utils/taskQueue'
+import { activeTasks, currentLabel, pendingCount, pendingJobs, queueActive } from '../utils/taskQueue'
 
 /** 右下角悬浮任务坞：主进程推来的按文件进度 + 渲染层队列的排队数 */
 const visible = computed(() => queueActive.value || activeTasks.value.length > 0)
@@ -23,8 +23,13 @@ const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.rou
         <div class="dock-track"><i :style="{ width: pct(t.done, t.total) + '%' }" /></div>
         <div class="dock-num">{{ t.done }}/{{ t.total }}</div>
       </div>
+      <div v-for="j in pendingJobs" :key="j.id" class="dock-row">
+        <div class="dock-label">{{ j.label }}</div>
+        <div class="dock-track dock-track--wait" />
+        <button class="dock-cancel" title="取消这个排队任务" @click="j.cancel()">✕</button>
+      </div>
       <!-- 已出队但主进程还没上报任务（例如正在等对话框/读参数） -->
-      <div v-if="queueActive && !activeTasks.length" class="dock-row">
+      <div v-if="queueActive && !activeTasks.length && !pendingJobs.length" class="dock-row">
         <div class="dock-label">{{ currentLabel }}…</div>
         <div class="dock-track dock-track--pulse"><i style="width: 40%" /></div>
       </div>
@@ -121,6 +126,23 @@ const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.rou
   font-size: 11px;
   color: var(--text-3);
   text-align: right;
+}
+.dock-track--wait {
+  background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 12px);
+}
+.dock-cancel {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px;
+  border-radius: 4px;
+  justify-self: end;
+}
+.dock-cancel:hover {
+  color: var(--el-color-danger, #f56c6c);
+  background: var(--surface-2);
 }
 .dock-enter-active,
 .dock-leave-active {

@@ -66,6 +66,8 @@ const api = {
   resetSettings: () => invoke('app:reset-settings'),
   /** 关闭询问：渲染层弹选择框，用户点完把结果送回主进程执行 */
   applyCloseChoice: (p: unknown) => invoke('app:apply-close-choice', p),
+  /** 渲染层全局错误落主进程日志 */
+  logError: (p: unknown) => invoke('app:log-error', p),
   onWindowCloseRequest: (cb: () => void): (() => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('app:close-request', listener)

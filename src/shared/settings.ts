@@ -19,6 +19,8 @@ export interface AppSettings {
   updateFeed: string
   /** 关闭主窗口时：询问 / 最小化到托盘 / 退出应用 */
   onClose: OnClose
+  /** 开机自动启动（登录后常驻托盘） */
+  autoStart: boolean
   /** 新用户首次启动的步骤指引是否已完成 */
   onboarded: boolean
 }
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   favorites: [],
   updateFeed: '',
   onClose: 'ask',
+  autoStart: false,
   onboarded: false
 }
 
@@ -56,6 +59,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
     favorites: Array.isArray(s.favorites) ? s.favorites.filter((x): x is string => typeof x === 'string') : [],
     updateFeed: typeof s.updateFeed === 'string' ? s.updateFeed : '',
     onClose,
+    autoStart: s.autoStart === true,
     onboarded: s.onboarded === true
   }
 }

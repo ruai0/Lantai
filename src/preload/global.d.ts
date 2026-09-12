@@ -141,6 +141,9 @@ export interface LantaiApi {
   undoState(): Promise<ApiResult<Record<UndoKind, UndoState | null>>>
   /** 订阅主进程任务进度推送；返回取消订阅函数 */
   onTaskUpdate(cb: (list: TaskSnapshot[]) => void): () => void
+  /** 请求取消主进程任务（当前文件处理完后停止） */
+  taskCancel(p: { id: number }): Promise<ApiResult<boolean>>
+  taskList(): Promise<ApiResult<TaskSnapshot[]>>
   updateCheck(): Promise<ApiResult<UpdateState>>
   updateInstall(): Promise<ApiResult<boolean>>
   updateState(): Promise<ApiResult<UpdateState>>

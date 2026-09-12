@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs'
 import PizZip from 'pizzip'
 import type { ReplaceTextParams, ReplaceTextResult } from '@shared/types'
 import { uniquePath } from './fileUtils'
+import { TaskCancelledError } from './taskProgress'
 
 interface ReplaceOutcome {
   outPath: string
@@ -66,7 +67,8 @@ async function replaceExcel(p: string, find: string, replace: string, outDir: st
 
 export async function replaceText(
   params: ReplaceTextParams,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean
 ): Promise<ReplaceTextResult> {
   const find = params.find
   if (!find) throw new Error('请填写要查找的文字')
@@ -75,6 +77,7 @@ export async function replaceText(
   const counts: ReplaceTextResult['counts'] = []
   let done = 0
   for (const p of params.paths) {
+    if (isCancelled?.()) throw new TaskCancelledError()
     const ext = path.extname(p).toLowerCase()
     let r: ReplaceOutcome
     if (ext === '.docx') r = await replaceWord(p, find, params.replace, params.outDir)

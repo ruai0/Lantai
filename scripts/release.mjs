@@ -1,11 +1,9 @@
 /**
- * 一键发布：版本号 → 提交 → git tag → 构建安装包 → 生成 SHA256SUMS.txt。
+ * 一键发布：版本号 → 提交 → git tag → 推送 GitHub，云端 Actions 负责构建与 Release。
  *   node scripts/release.mjs 0.6.0     （或 npm run release 0.6.0）
- * 前置：CHANGELOG.md 已写好 "## [0.6.0]" 段落；工作区干净。
- * 发布物生成在 release/ 后，需手工上传到更新源（GitHub Releases 或静态目录）。
+ * 前置：CHANGELOG.md 已写好 "## [0.6.0]" 段落；工作区干净；origin 为 GitHub SSH。
  */
 import { spawnSync } from 'node:child_process'
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -45,25 +43,12 @@ run('git', ['add', 'package.json'])
 run('git', ['commit', '-m', `release: v${ver}`])
 run('git', ['tag', `v${ver}`])
 
-console.log('▶ 构建渲染层 + 主进程')
-run(process.execPath, [path.join(ROOT, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'])
+console.log('▶ 推送到 GitHub（main + tag），云端 Actions 将自动构建并发布 Release')
+run('git', ['push', 'origin', 'main'])
+run('git', ['push', 'origin', `v${ver}`])
 
-console.log('▶ 打包安装程序（electron-builder）')
-run(process.execPath, [path.join(ROOT, 'node_modules', 'electron-builder', 'out', 'cli', 'cli.js')])
-
-console.log('▶ 生成 SHA256SUMS.txt')
-const rel = path.join(ROOT, 'release')
-const artifacts = fs
-  .readdirSync(rel)
-  .filter(f => /(\.exe|\.yml|\.blockmap)$/i.test(f) && f.includes(ver))
-if (!artifacts.length) die('release/ 里没有找到本次版本的产物')
-const lines = artifacts.map(f => {
-  const hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(rel, f))).digest('hex')
-  console.log(`  ${hash.slice(0, 16)}…  ${f}`)
-  return `${hash}  ${f}`
-})
-fs.writeFileSync(path.join(rel, 'SHA256SUMS.txt'), lines.join('\n') + '\n')
-
-console.log(`\n✔ v${ver} 发布物已就绪（release/ + SHA256SUMS.txt，git tag v${ver} 已打）`)
-console.log('  下一步：把 setup / portable / latest.yml / blockmap 上传到更新源（如 GitHub Releases），')
-console.log('  用户端在「设置 → 软件更新」配置更新源后即可自动收到升级。')
+console.log(`\n✔ v${ver} 已交给 GitHub Actions 构建（约 5~10 分钟）`)
+console.log(`  盯进度：仓库页 Actions 标签，或直接开 https://github.com/ruai0/Lantai/actions`)
+console.log(`  完成后 Releases 页会多出 setup/便携版/latest.yml/SHA256SUMS.txt；`)
+console.log(`  已安装的旧版本用户下次启动即会收到自动升级。`)
+console.log(`  如需本地产物：npm run dist（发布请走上面的云端流程，别混用）`)

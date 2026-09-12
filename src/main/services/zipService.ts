@@ -3,6 +3,7 @@ import path from 'node:path'
 import PizZip from 'pizzip'
 import type { ZipPackParams, ZipUnpackParams, ZipUnpackResult } from '@shared/types'
 import { uniquePath } from './fileUtils'
+import { TaskCancelledError } from './taskProgress'
 
 interface WalkedFile {
   relPath: string
@@ -20,7 +21,8 @@ function walk(dir: string, root: string, out: WalkedFile[]): void {
 /** 把整个文件夹打包成一个 zip（保持子文件夹结构） */
 export async function packZip(
   params: ZipPackParams,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean
 ): Promise<{ outputPath: string; count: number }> {
   if (!fs.existsSync(params.dir) || !fs.statSync(params.dir).isDirectory()) {
     throw new Error('请选择要打包的文件夹')
@@ -31,6 +33,7 @@ export async function packZip(
   const zip = new PizZip()
   let done = 0
   for (const f of files) {
+    if (isCancelled?.()) throw new TaskCancelledError()
     zip.file(f.relPath, fs.readFileSync(f.fullPath), { binary: true })
     onProgress?.(++done, files.length)
   }

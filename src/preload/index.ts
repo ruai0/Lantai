@@ -84,6 +84,8 @@ const api = {
     ipcRenderer.on('task:update', listener)
     return () => ipcRenderer.removeListener('task:update', listener)
   },
+  taskCancel: (p: unknown) => invoke('task:cancel', p),
+  taskList: () => invoke('task:list'),
   updateCheck: () => invoke('update:check'),
   updateInstall: () => invoke('update:install'),
   updateState: () => invoke('update:state'),

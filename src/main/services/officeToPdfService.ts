@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { OfficeToPdfParams, OfficeToPdfResult } from '@shared/types'
 import { stemOf, uniquePath } from './fileUtils'
+import { TaskCancelledError } from './taskProgress'
 
 const SUPPORTED = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
 
@@ -72,7 +73,8 @@ foreach ($app in $cache.Values) { try { $app.Quit() } catch {} }
 
 export async function officeToPdf(
   params: OfficeToPdfParams,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean
 ): Promise<OfficeToPdfResult> {
   if (params.paths.length === 0) throw new Error('请先选择要转换的文件')
   const bad = params.paths.filter(p => !SUPPORTED.includes(path.extname(p).toLowerCase()))
@@ -108,6 +110,14 @@ export async function officeToPdf(
     })
     let buf = ''
     let err = ''
+    let byUser = false
+    // 取消语义：杀子进程即可，Office 后台实例会被 PowerShell 退出时带走；已完成的文件保留
+    const poll = setInterval(() => {
+      if (isCancelled?.()) {
+        byUser = true
+        child.kill()
+      }
+    }, 400)
     const timer = setTimeout(() => {
       child.kill()
       reject(new Error('转换超时（10 分钟），请关闭正在打开的 Office 文档后重试'))
@@ -120,13 +130,16 @@ export async function officeToPdf(
     })
     child.stderr.on('data', d => (err += d.toString()))
     child.on('error', e => {
+      clearInterval(poll)
       clearTimeout(timer)
       reject(new Error(`无法启动 PowerShell：${e.message}`))
     })
     child.on('exit', code => {
+      clearInterval(poll)
       clearTimeout(timer)
       if (buf) consume(buf)
-      if (code === 0 || outputs.length || failed.length) resolve()
+      if (byUser) reject(new TaskCancelledError())
+      else if (code === 0 || outputs.length || failed.length) resolve()
       else reject(new Error(err.trim() || `PowerShell 退出码 ${code}`))
     })
   })

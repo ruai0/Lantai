@@ -468,13 +468,13 @@ export interface PdfBuildParams {
 
 /* ---------- 平台层：任务队列 / 环境探测 / 文件夹展开 / 撤销 ---------- */
 
-/** 主进程按文件循环的任务快照，经 task:update 推给渲染层 TaskDock */
+/** 主进程按文件循环的任务快照，经 task:update 推给渲染层 TaskDock；cancelled = 用户请求中断，在当前文件处理完后生效 */
 export interface TaskSnapshot {
   id: number
   label: string
   done: number
   total: number
-  state: 'running' | 'done' | 'error'
+  state: 'running' | 'done' | 'error' | 'cancelled'
 }
 
 /** 本机 Office/WPS 组件与中文字体探测结果 */

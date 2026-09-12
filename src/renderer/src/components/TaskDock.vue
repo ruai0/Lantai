@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { api } from '../utils/ipc'
 import { activeTasks, currentLabel, pendingCount, pendingJobs, queueActive } from '../utils/taskQueue'
 
-/** 右下角悬浮任务坞：主进程推来的按文件进度 + 渲染层队列的排队数 */
+/** 右下角悬浮任务坞：主进程推来的按文件进度 + 渲染层队列的排队/取消 */
 const visible = computed(() => queueActive.value || activeTasks.value.length > 0)
 const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0)
+const stopRunning = (id: number) => void api.taskCancel({ id })
 </script>
 
 <template>
@@ -19,19 +21,25 @@ const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.rou
           {{ t.label }}
           <em v-if="t.state === 'done'" class="dock-mark dock-mark--ok">✓</em>
           <em v-else-if="t.state === 'error'" class="dock-mark dock-mark--err">✕</em>
+          <em v-else-if="t.state === 'cancelled'" class="dock-mark dock-mark--wait">已请求停止，收尾中…</em>
         </div>
         <div class="dock-track"><i :style="{ width: pct(t.done, t.total) + '%' }" /></div>
         <div class="dock-num">{{ t.done }}/{{ t.total }}</div>
+        <button v-if="t.state === 'running'" class="dock-cancel" title="在当前文件处理完后停止" @click="stopRunning(t.id)">■</button>
+        <span v-else />
       </div>
       <div v-for="j in pendingJobs" :key="j.id" class="dock-row">
         <div class="dock-label">{{ j.label }}</div>
         <div class="dock-track dock-track--wait" />
+        <span />
         <button class="dock-cancel" title="取消这个排队任务" @click="j.cancel()">✕</button>
       </div>
       <!-- 已出队但主进程还没上报任务（例如正在等对话框/读参数） -->
       <div v-if="queueActive && !activeTasks.length && !pendingJobs.length" class="dock-row">
         <div class="dock-label">{{ currentLabel }}…</div>
         <div class="dock-track dock-track--pulse"><i style="width: 40%" /></div>
+        <span />
+        <span />
       </div>
     </div>
   </Transition>
@@ -69,7 +77,7 @@ const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.rou
 }
 .dock-row {
   display: grid;
-  grid-template-columns: 1fr 90px 44px;
+  grid-template-columns: 1fr 80px 44px 20px;
   align-items: center;
   gap: 8px;
   padding: 4px 0;
@@ -90,6 +98,14 @@ const pct = (done: number, total: number) => (total > 0 ? Math.min(100, Math.rou
 }
 .dock-mark--err {
   color: var(--el-color-danger, #f56c6c);
+}
+.dock-mark--wait {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.dock-row--cancelled .dock-track i {
+  background: var(--text-3);
 }
 .dock-track {
   height: 5px;

@@ -50,3 +50,8 @@ export const queueActive = computed(() => labels.value.length > 0)
 api.onTaskUpdate(list => {
   activeTasks.value = list as TaskSnapshot[]
 })
+
+// 初始拉一次：渲染层崩溃重载后（主进程任务还在跑）恢复任务坞显示
+void api.taskList().then(r => {
+  if (r.ok) activeTasks.value = r.data
+})

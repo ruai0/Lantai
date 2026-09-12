@@ -59,15 +59,17 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 
 ## 发布与更新
 
-**发布（维护者）**：一条命令完成 版本号 → 提交 → git tag → 安装包 → 校验和。
+**发布（维护者）**：一条命令，构建与上传全部在 GitHub 云端完成。
 
 ```bash
-# 1. 先在 CHANGELOG.md 写好 "## [0.6.0]" 段落并提交，工作区保持干净
+# 1. 先在 CHANGELOG.md 把 "## [Unreleased]" 改为 "## [0.6.0]" 并提交，工作区保持干净
 npm run release 0.6.0
-# 产物：release/lantai-setup-0.6.0.exe、lantai-portable-0.6.0.exe、latest.yml、*.blockmap、SHA256SUMS.txt
+# 脚本做：bump 版本 → commit → tag → push。GitHub Actions 自动构建
+# lantai-setup-0.6.0.exe / lantai-portable-0.6.0.exe / latest.yml / blockmap / SHA256SUMS.txt
+# 并创建 Release。约 5~10 分钟，仓库页 Actions 标签可看进度。
 ```
 
-**更新源**：把上述产物上传到任一 **HTTP(S) 静态可访问**的位置即可——GitHub Releases（用户填 `https://github.com/<owner>/<repo>`）、内网 nginx/IIS 目录、网盘的直链镜像站均可。
+**更新源**：GitHub Releases（本仓库默认）。也可以把产物镜像到任一 **HTTP(S) 静态可访问**位置（内网 nginx/IIS 目录等）供无法访问 GitHub 的机器使用。
 
 **用户侧**：开箱即用——默认从官方仓库 `https://github.com/ruai0/Lantai` 的 Releases 检查更新。应用启动 5 秒后静默检查一次，发现新版自动后台下载，右下角提示「重启安装」；也可随时在「设置 → 软件更新」手动检查。上不了外网的机器可在该处「更新源设置」里填内网镜像目录地址，或填 `off` 彻底禁用更新检查。
 

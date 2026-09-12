@@ -25,7 +25,7 @@ import {
   watermarkPdf
 } from '../services/pdfService'
 
-handle('pdf:merge', p => runTracked('PDF 合并', p.paths.length, d => mergePdfs(p, d)))
+handle('pdf:merge', p => runTracked('PDF 合并', p.paths.length, ctx => mergePdfs(p, ctx.progress, ctx.isCancelled)))
 handle('pdf:split', (p: import('@shared/types').PdfSplitParams) => splitPdf(p))
 handle('pdf:rotate', (p: import('@shared/types').PdfRotateParams) => rotatePdf(p))
 handle('pdf:add-page-numbers', (p: PdfPageNumberParams) => addPageNumbers(p))

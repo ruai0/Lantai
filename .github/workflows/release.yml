@@ -41,6 +41,22 @@ jobs:
             Set-Content -Encoding ascii release/SHA256SUMS.txt
           Get-Content release/SHA256SUMS.txt
 
+      - name: 提取本版更新说明（取自 CHANGELOG 对应段落）
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          $all = Get-Content CHANGELOG.md -Encoding utf8
+          $si = -1
+          for ($i = 0; $i -lt $all.Count; $i++) { if ($all[$i].Contains("## [$ver]")) { $si = $i; break } }
+          if ($si -lt 0) {
+            "本次版本更新内容详见仓库 CHANGELOG.md。" | Set-Content release-notes.md -Encoding utf8
+          } else {
+            $ei = $all.Count
+            for ($j = $si + 1; $j -lt $all.Count; $j++) { if ($all[$j] -match '^## \[') { $ei = $j; break } }
+            ($all[($si + 1)..($ei - 1)] -join "`n") | Set-Content release-notes.md -Encoding utf8
+          }
+          Get-Content release-notes.md
+
       - name: 创建 Release 并上传产物
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,4 +64,4 @@ jobs:
           gh release create ${{ github.ref_name }}
           release/*.exe release/*.blockmap release/latest.yml release/SHA256SUMS.txt
           --title "兰台 ${{ github.ref_name }}"
-          --notes "更新内容见 CHANGELOG.md。安装包 freetool/lantai-setup 与 latest.yml 均已附上，已安装用户会自动收到升级。"
+          --notes-file release-notes.md

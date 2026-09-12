@@ -118,6 +118,10 @@ function openRepo() {
   void api.openExternal('https://github.com/ruai0/Lantai')
 }
 
+function openReleaseNotes() {
+  void api.openExternal('https://github.com/ruai0/Lantai/releases/latest')
+}
+
 async function copyDiagnostics() {
   const res = await api.diagnostics()
   if (!res.ok) {
@@ -253,6 +257,7 @@ function fmtTime(t: number): string {
         <span>当前版本 v{{ version }}</span>
         <el-tag :type="updateStatus.type" size="small">{{ updateStatus.text }}</el-tag>
         <span class="update-actions">
+          <el-button link type="primary" size="small" @click="openReleaseNotes">查看更新内容</el-button>
           <el-button type="primary" plain size="small" :loading="checking" @click="runCheck">检查更新</el-button>
           <el-button v-if="updateState.phase === 'ready'" type="success" size="small" :loading="installing" @click="runInstall">
             重启并安装
@@ -273,7 +278,7 @@ function fmtTime(t: number): string {
       <el-icon><Setting /></el-icon>
       <span>兰台（Lantai）v{{ version }}</span>
       <span class="about-dot">·</span>
-      <span>© 2026 <b>ruai0</b> · MIT License</span>
+      <span>© 2026 <b>ruai0</b> · 免费非商用（详见 LICENSE）</span>
       <span class="about-dot">·</span>
       <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
       <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>

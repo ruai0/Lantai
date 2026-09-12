@@ -137,3 +137,7 @@ src/
 ## 设计文档
 
 [docs/superpowers/specs/2026-09-07-freetool-design.md](docs/superpowers/specs/2026-09-07-freetool-design.md)
+
+## 许可
+
+兰台采用**免费非商用**许可（见 [LICENSE](LICENSE)）：个人学习研究、企业/政府/事业单位内部效率用途可自由使用、修改、分发；商业销售、捆绑商业产品、作为商业服务提供需事先获得作者（GitHub: [@ruai0](https://github.com/ruai0)）书面授权。内部办公提效不属于商用，请放心部署。

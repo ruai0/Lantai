@@ -30,9 +30,10 @@ watch(
   phase => {
     if (phase !== 'ready') return
     const latest = updateState.value.latest ?? ''
+    const notes = (updateState.value.notes ?? '').replace(/^#+\s*/gm, '').trim()
     ElNotification({
       title: `新版本 v${latest} 已就绪`,
-      message: '点击打开设置 → 软件更新，重启安装',
+      message: notes ? notes.slice(0, 100) + (notes.length > 100 ? '…' : '') : '点击打开设置 → 软件更新，重启安装',
       type: 'success',
       duration: 0,
       onClick: () => void router.push('/settings')

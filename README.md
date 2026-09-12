@@ -26,6 +26,13 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 - 功能页共用的类名（`step-card`、`step-no`、`file-list`、`tool-grid`、`form-row` 等）保持不变，新增页面沿用即可自动获得同一套观感。
 - 已适配 `prefers-reduced-motion`，窄屏下隐藏横幅仪表装饰并收紧留白。
 
+## 运维与排障
+
+- 主进程日志落盘 `%APPDATA%/FreeTool/logs/main-YYYYMMDD.log`（启动记录 + 所有 IPC 业务异常 + 未捕获异常，超 5MB 自动轮转一份 .old）。用户报障先要这份文件。
+- 单实例：重复启动不会开第二个窗口，而是聚焦已有窗口。
+- 窗口尺寸/位置自动记忆（`%APPDATA%/FreeTool/window-state.json`），换显示器后旧坐标失效时自动回退居中。
+- 应用图标由 `npm run gen:icon` 生成（build/icon.png + icon.ico），设计语言与界面一致。
+
 ## 开发
 
 ```bash
@@ -38,6 +45,12 @@ npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
 ```
 
 > 前提：Node ≥ 18 且 `node` 在 PATH 中。若 npm 报「'node' 不是内部或外部命令」，确认 node.exe 所在目录（如 `J:\node_js`）已加入系统 PATH。
+
+### UI 冒烟（CDP 驱动，发版前跑一遍）
+
+1. `FT_TEST_HOOKS=1 npm run build` 构建带组件实例钩子的测试包（正式构建不带，产物无此钩子）
+2. `node_modules/electron/dist/electron.exe . --remote-debugging-port=9222` 启动
+3. `node scripts/cdp.mjs .ftest/ui-organize.js`（或 ui-pdf3 / ui-image / ui-tools / ui-filekit / ui-match / ui-diff）逐个流程验证；测试素材用 `node scripts/make-fixtures.mjs` 生成
 
 ## 架构
 
@@ -52,9 +65,11 @@ src/
 │   ├─ officeToPdfService  PowerShell COM 自动化（Word/Excel/PPT × MS Office/WPS）
 │   ├─ inventoryService    文件清单与重复文件（exceljs 报告导出）
 │   ├─ zipService          PizZip 打包 / 批量解压
-│   └─ extractService      txt/csv/xlsx/docx 提取手机号/身份证/邮箱
+│   ├─ extractService      txt/csv/xlsx/docx 提取手机号/身份证/邮箱
+│   ├─ log                 主进程日志落盘（userData/logs，IPC 异常与崩溃记录）
+│   └─ windowState         窗口尺寸/位置记忆（含显示器有效性钳制）
 ├─ preload/            contextBridge 白名单（global.d.ts 提供 window.api 类型）
-└─ renderer/           Vue3 + Element Plus；图片处理/长图拼接/证件照排版用 Canvas，PDF 转图片·提取文字·压缩缩略图用 pdfjs-dist，二维码用 qrcode、识别用 jsqr、拼音用 pinyin-pro
+└─ renderer/           Vue3 + Element Plus；utils/ipc.ts 包装 window.api（contextBridge 拒收 Vue Proxy，调用前净化）；图片处理/长图拼接/证件照排版用 Canvas，PDF 转图片·提取文字·压缩缩略图用 pdfjs-dist，二维码用 qrcode、识别用 jsqr、拼音用 pinyin-pro
 ```
 
 - IPC 通道按工具分组（`pdf:merge`、`excel:mask`、`excel:match-fill`、`excel:compare`、`office:to-pdf`、`file:find-duplicates`、`zip:pack`、`text:extract`…），业务异常在 main 统一包装为 `{ ok:false, error }`。

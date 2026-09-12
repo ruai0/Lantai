@@ -1,6 +1,6 @@
 {
   "name": "lantai",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "兰台（Lantai）办公工具箱：PDF / 图片 / Excel / 表格匹配比对 / Office转PDF / 批量替换 / 模板填充 / 文件管理 / 小工具",
   "main": "./out/main/index.js",
   "author": "ruai1024",

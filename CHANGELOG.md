@@ -2,7 +2,7 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)；格式参考 Keep a Changelog。
 
-## [Unreleased]
+## [0.6.0] - 2026-09-13
 
 ### 变更 — 品牌
 

@@ -1,13 +1,44 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import { call } from '../utils/api'
-import type { OrganizeMode, OrganizePair, RenamePair } from '@shared/types'
+import type { OrganizeMode, OrganizePair, RenamePair, UndoKind, UndoState } from '@shared/types'
 
 const mode = ref<'rename' | 'organize'>('rename')
+
+/* ---------- 撤销（#6）：每类操作可一键还原最近一次执行 ---------- */
+
+const undoStates = ref<Record<UndoKind, UndoState | null>>({ rename: null, organize: null })
+const undoing = ref(false)
+
+async function refreshUndo() {
+  const r = await api.undoState()
+  if (r.ok) undoStates.value = r.data
+}
+onMounted(refreshUndo)
+
+async function undo(kind: UndoKind) {
+  undoing.value = true
+  try {
+    const r = await api.undoLast({ kind })
+    if (!r.ok) {
+      ElMessage.error(r.error)
+      return
+    }
+    const parts = [`还原 ${r.data.undone} 项`]
+    if (r.data.skipped) parts.push(`跳过 ${r.data.skipped} 项（已被后续移动）`)
+    if (r.data.failed.length) parts.push(`失败 ${r.data.failed.length} 项`)
+    ElMessage.success(`撤销完成：${parts.join('，')}`)
+    plan.value = []
+    oPlan.value = []
+    await refreshUndo()
+  } finally {
+    undoing.value = false
+  }
+}
 
 /* ---------- 批量重命名 ---------- */
 
@@ -83,6 +114,7 @@ async function apply() {
       `完成 ${todo.length} 个重命名`
     )
     plan.value = []
+    await refreshUndo()
   } finally {
     applying.value = false
   }
@@ -139,6 +171,7 @@ async function applyOrganize() {
       `已归类 ${todo.length} 个文件`
     )
     oPlan.value = []
+    await refreshUndo()
   } finally {
     oApplying.value = false
   }
@@ -241,6 +274,14 @@ async function applyOrganize() {
         >
           执行重命名（{{ todoCount }} 项）
         </el-button>
+        <div v-if="undoStates.rename" class="undo-row">
+          <span>上次执行：{{ undoStates.rename.count }} 项 · {{ undoStates.rename.dir }}</span>
+          <el-popconfirm title="把这一批文件名全部还原？" width="240" @confirm="undo('rename')">
+            <template #reference>
+              <el-button size="small" type="warning" plain :loading="undoing">撤销</el-button>
+            </template>
+          </el-popconfirm>
+        </div>
       </StepCard>
     </template>
 
@@ -288,6 +329,14 @@ async function applyOrganize() {
         >
           执行归类（{{ oTodoCount }} 项）
         </el-button>
+        <div v-if="undoStates.organize" class="undo-row">
+          <span>上次执行：{{ undoStates.organize.count }} 项 · {{ undoStates.organize.dir }}</span>
+          <el-popconfirm title="把这一批文件全部移回原位？" width="240" @confirm="undo('organize')">
+            <template #reference>
+              <el-button size="small" type="warning" plain :loading="undoing">撤销</el-button>
+            </template>
+          </el-popconfirm>
+        </div>
       </StepCard>
     </template>
   </div>
@@ -296,5 +345,15 @@ async function applyOrganize() {
 <style scoped>
 .rename-tabs {
   margin-bottom: 10px;
+}
+.undo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--text-2);
 }
 </style>

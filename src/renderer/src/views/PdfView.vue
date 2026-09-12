@@ -6,7 +6,7 @@ import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import ResultPanel from '../components/ResultPanel.vue'
-import { call } from '../utils/api'
+import { call, callQ } from '../utils/api'
 import { openPdf } from '../utils/pdfjs'
 import type { PdfSplitMode, PdfToImagesParams, WatermarkColor } from '@shared/types'
 
@@ -287,7 +287,7 @@ async function run() {
         ElMessage.warning('合并至少需要选择两个 PDF')
         return
       }
-      const r = await call(api.pdfMerge({ paths: mergeFiles.value, outDir: dir }), '合并完成')
+      const r = await callQ('PDF 合并', () => api.pdfMerge({ paths: mergeFiles.value, outDir: dir }), '合并完成')
       if (r) outputs.value = r.outputs
     } else if (tab.value === 'split') {
       if (!splitFile.value.length) {

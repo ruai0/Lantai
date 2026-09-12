@@ -70,7 +70,10 @@ foreach ($app in $cache.Values) { try { $app.Quit() } catch {} }
 `
 }
 
-export async function officeToPdf(params: OfficeToPdfParams): Promise<OfficeToPdfResult> {
+export async function officeToPdf(
+  params: OfficeToPdfParams,
+  onProgress?: (done: number, total: number) => void
+): Promise<OfficeToPdfResult> {
   if (params.paths.length === 0) throw new Error('请先选择要转换的文件')
   const bad = params.paths.filter(p => !SUPPORTED.includes(path.extname(p).toLowerCase()))
   if (bad.length) {
@@ -87,17 +90,34 @@ export async function officeToPdf(params: OfficeToPdfParams): Promise<OfficeToPd
   // PowerShell 5.1 默认按 ANSI 读 .ps1，加 UTF-8 BOM 保证中文路径不乱码
   await fs.promises.writeFile(tmp, '\ufeff' + script, 'utf-8')
 
-  const stdout = await new Promise<string>((resolve, reject) => {
+  // PowerShell 逐文件输出一行 OK/FAIL，边读边推进度，不等整个批次结束
+  const outputs: string[] = []
+  const failed: OfficeToPdfResult['failed'] = []
+  const total = pairs.length
+  const consume = (line: string): void => {
+    const m = line.match(/^(OK|FAIL)\|([^|]*)\|(.*)$/)
+    if (!m) return
+    if (m[1] === 'OK') outputs.push(m[3].trim())
+    else failed.push({ name: path.basename(m[2].trim()), reason: m[3].trim() || '未知错误' })
+    onProgress?.(outputs.length + failed.length, total)
+  }
+
+  await new Promise<void>((resolve, reject) => {
     const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmp], {
       windowsHide: true
     })
-    let out = ''
+    let buf = ''
     let err = ''
     const timer = setTimeout(() => {
       child.kill()
       reject(new Error('转换超时（10 分钟），请关闭正在打开的 Office 文档后重试'))
     }, 10 * 60 * 1000)
-    child.stdout.on('data', d => (out += d.toString()))
+    child.stdout.on('data', d => {
+      buf += d.toString()
+      const lines = buf.split(/\r?\n/)
+      buf = lines.pop() ?? ''
+      lines.forEach(consume)
+    })
     child.stderr.on('data', d => (err += d.toString()))
     child.on('error', e => {
       clearTimeout(timer)
@@ -105,20 +125,13 @@ export async function officeToPdf(params: OfficeToPdfParams): Promise<OfficeToPd
     })
     child.on('exit', code => {
       clearTimeout(timer)
-      if (code === 0 || out.includes('OK|') || out.includes('FAIL|')) resolve(out)
+      if (buf) consume(buf)
+      if (code === 0 || outputs.length || failed.length) resolve()
       else reject(new Error(err.trim() || `PowerShell 退出码 ${code}`))
     })
   })
   await fs.promises.rm(tmp, { force: true }).catch(() => {})
 
-  const outputs: string[] = []
-  const failed: OfficeToPdfResult['failed'] = []
-  for (const line of stdout.split(/\r?\n/)) {
-    const m = line.match(/^(OK|FAIL)\|([^|]*)\|(.*)$/)
-    if (!m) continue
-    if (m[1] === 'OK') outputs.push(m[3].trim())
-    else failed.push({ name: path.basename(m[2].trim()), reason: m[3].trim() || '未知错误' })
-  }
   if (outputs.length === 0 && failed.length === 0) {
     throw new Error('没有产生任何转换结果，请确认本机已安装 Office 或 WPS')
   }

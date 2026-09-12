@@ -10,6 +10,7 @@ import type {
   PdfWatermarkParams
 } from '@shared/types'
 import { handle } from './wrapper'
+import { runTracked } from '../services/taskProgress'
 import {
   addPageNumbers,
   buildFromImages,
@@ -24,7 +25,7 @@ import {
   watermarkPdf
 } from '../services/pdfService'
 
-handle('pdf:merge', (p: import('@shared/types').PdfMergeParams) => mergePdfs(p))
+handle('pdf:merge', p => runTracked('PDF 合并', p.paths.length, d => mergePdfs(p, d)))
 handle('pdf:split', (p: import('@shared/types').PdfSplitParams) => splitPdf(p))
 handle('pdf:rotate', (p: import('@shared/types').PdfRotateParams) => rotatePdf(p))
 handle('pdf:add-page-numbers', (p: PdfPageNumberParams) => addPageNumbers(p))

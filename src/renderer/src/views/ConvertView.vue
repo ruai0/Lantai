@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
-import { call, basename } from '../utils/api'
+import { callQ, basename } from '../utils/api'
 import type { OfficeToPdfResult } from '@shared/types'
 
 const OFFICE_FILTER = [
@@ -33,7 +33,7 @@ async function run() {
   }
   running.value = true
   try {
-    const r = await call(api.officeToPdf({ paths: files.value, outDir: dir }), '转换完成')
+    const r = await callQ('Office 转 PDF', () => api.officeToPdf({ paths: files.value, outDir: dir }), '转换完成')
     if (r) result.value = r
   } finally {
     running.value = false

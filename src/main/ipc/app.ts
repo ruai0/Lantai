@@ -5,6 +5,7 @@ import path from 'node:path'
 import { handle } from './wrapper'
 import { focusMainWindow } from '../mainWindow'
 import { getSettings } from '../services/settingsService'
+import { probeEnv } from '../services/envProbe'
 
 interface NotifyParams {
   title: string
@@ -21,7 +22,7 @@ handle('app:notify', (p: NotifyParams): boolean => {
 })
 
 /** 诊断快照：版本/运行环境/路径/日志/偏好，供设置页一键复制报障 */
-handle('app:diagnostics', (): Record<string, string | number> => {
+handle('app:diagnostics', async (): Promise<Record<string, string | number>> => {
   const logDir = path.join(app.getPath('userData'), 'logs')
   let logs = '(无)'
   try {
@@ -34,6 +35,13 @@ handle('app:diagnostics', (): Record<string, string | number> => {
   }
   const s = getSettings()
   const cpu = os.cpus()[0]?.model ?? '未知'
+  // 环境探测失败不拖垮诊断整体：标记未探测即可
+  let probe: Awaited<ReturnType<typeof probeEnv>> | null = null
+  try {
+    probe = await probeEnv()
+  } catch {
+    /* 探测异常按未探测处理 */
+  }
   return {
     version: app.getVersion(),
     electron: process.versions.electron,
@@ -49,6 +57,14 @@ handle('app:diagnostics', (): Record<string, string | number> => {
     onComplete: s.onComplete,
     defaultOutDir: s.defaultOutDir || '(未设置)',
     favorites: s.favorites.length,
-    notify: s.notify ? '开' : '关'
+    notify: s.notify ? '开' : '关',
+    officeWord: probe?.word ?? '未探测',
+    officeExcel: probe?.excel ?? '未探测',
+    officePpt: probe?.ppt ?? '未探测',
+    cjkFonts: probe ? (probe.cjkFonts.join(', ') || '无') : '未探测',
+    watermark: probe ? (probe.watermarkReady ? '可用' : '缺中文字体') : '未探测'
   }
 })
+
+/** 环境探测（设置页展示用）；force=true 忽略缓存重探 */
+handle('app:probe', (p?: { force?: boolean }) => probeEnv(!!p?.force))

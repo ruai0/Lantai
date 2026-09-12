@@ -6,7 +6,7 @@ import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import ResultPanel from '../components/ResultPanel.vue'
-import { call } from '../utils/api'
+import { callQ } from '../utils/api'
 import type { ReplaceTextResult } from '@shared/types'
 
 const OFFICE_FILTER = [{ name: 'Word / Excel 文档', extensions: ['docx', 'xlsx'] }]
@@ -35,13 +35,15 @@ async function run() {
   }
   running.value = true
   try {
-    const r = await call(
-      api.replaceText({
-        paths: files.value,
-        find: findText.value,
-        replace: replaceWith.value,
-        outDir: dir
-      }),
+    const r = await callQ(
+      '批量查找替换',
+      () =>
+        api.replaceText({
+          paths: files.value,
+          find: findText.value,
+          replace: replaceWith.value,
+          outDir: dir
+        }),
       '替换完成'
     )
     if (r) result.value = r

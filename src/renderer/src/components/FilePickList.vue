@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
 import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import type { FileFilterDef } from '@shared/types'
 import { basename } from '../utils/api'
@@ -30,11 +31,6 @@ const allowedExts = computed<Set<string> | null>(() => {
   return set
 })
 
-function extOf(p: string): string {
-  const i = p.lastIndexOf('.')
-  return i < 0 ? '' : p.slice(i + 1).toLowerCase()
-}
-
 async function pick() {
   loading.value = true
   try {
@@ -49,25 +45,34 @@ async function pick() {
   }
 }
 
-/** 拖入：合并去重，按 filters 过滤；单选时只取第一个合法文件 */
-function onDrop(e: DragEvent) {
+/** 拖入：接受文件与整个文件夹（目录由主进程递归展开），合并去重，按 filters 过滤 */
+async function onDrop(e: DragEvent) {
   dragOver.value = false
   const files = e.dataTransfer?.files
   if (!files?.length) return
-  const merged = [...props.modelValue]
-  let rejected = 0
+  const paths: string[] = []
   for (const file of Array.from(files)) {
     const p = api.getPathForFile(file)
-    if (!p) continue
-    if (allowedExts.value && !allowedExts.value.has(extOf(p))) {
-      rejected++
-      continue
-    }
-    if (!merged.includes(p)) merged.push(p)
+    if (p) paths.push(p)
   }
-  const result = props.multiple ? merged : merged.slice(-1)
-  if (rejected) console.warn(`[拖拽] 已忽略 ${rejected} 个不符合类型要求的文件`)
-  emit('update:modelValue', result)
+  if (!paths.length) return
+  loading.value = true
+  try {
+    const res = await api.expandPaths({ paths, exts: allowedExts.value ? [...allowedExts.value] : undefined })
+    if (!res.ok) {
+      ElMessage.error(res.error)
+      return
+    }
+    const merged = [...props.modelValue]
+    for (const p of res.data.files) if (!merged.includes(p)) merged.push(p)
+    const result = props.multiple ? merged : merged.slice(-1)
+    if (res.data.dirs) ElMessage.success(`已展开 ${res.data.dirs} 个文件夹，共 ${res.data.files.length} 个文件`)
+    if (res.data.truncated) ElMessage.warning('文件数超过 2000 上限，仅收录前面部分')
+    if (res.data.rejected) console.warn(`[拖拽] 已忽略 ${res.data.rejected} 个不符合类型要求的文件`)
+    emit('update:modelValue', result)
+  } finally {
+    loading.value = false
+  }
 }
 
 function remove(i: number) {

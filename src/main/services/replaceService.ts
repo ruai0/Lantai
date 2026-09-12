@@ -64,12 +64,16 @@ async function replaceExcel(p: string, find: string, replace: string, outDir: st
   return { outPath: out, count }
 }
 
-export async function replaceText(params: ReplaceTextParams): Promise<ReplaceTextResult> {
+export async function replaceText(
+  params: ReplaceTextParams,
+  onProgress?: (done: number, total: number) => void
+): Promise<ReplaceTextResult> {
   const find = params.find
   if (!find) throw new Error('请填写要查找的文字')
   if (params.paths.length === 0) throw new Error('请先选择文件')
   const outputs: string[] = []
   const counts: ReplaceTextResult['counts'] = []
+  let done = 0
   for (const p of params.paths) {
     const ext = path.extname(p).toLowerCase()
     let r: ReplaceOutcome
@@ -78,6 +82,7 @@ export async function replaceText(params: ReplaceTextParams): Promise<ReplaceTex
     else throw new Error(`暂只支持 .docx / .xlsx（不支持：${path.basename(p)}）`)
     outputs.push(r.outPath)
     counts.push({ name: path.basename(p), count: r.count })
+    onProgress?.(++done, params.paths.length)
   }
   return { outputs, counts }
 }

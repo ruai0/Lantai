@@ -1,6 +1,7 @@
 import { ElMessage } from 'element-plus'
 import type { ApiResult } from '@shared/types'
 import { api } from './ipc'
+import { enqueue } from './taskQueue'
 import { recordHistory, settings } from './settings'
 
 /** 从各服务返回体里提取输出路径（outputs[] / outputPath / path 三种约定） */
@@ -46,4 +47,13 @@ export function basename(p: string): string {
 export function dirname(p: string): string {
   const i = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
   return i > 0 ? p.slice(0, i) : p
+}
+
+/**
+ * 排队版 call：重批量任务（合并、Office 转换、批量替换、打包）走 #1 串行队列，
+ * 发起后可切到别的工具继续排队；进度与「进行中」列表见右下角 TaskDock。
+ * label 请与主进程 runTracked 的通道名保持一致，便于 Dock 对齐展示。
+ */
+export function callQ<T>(label: string, job: () => Promise<ApiResult<T>>, successMsg?: string): Promise<T | null> {
+  return enqueue(label, () => call(job(), successMsg))
 }

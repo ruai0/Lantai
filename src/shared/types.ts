@@ -465,3 +465,51 @@ export interface PdfBuildParams {
   /** 输出文件名主干，缺省用「压缩重建」 */
   nameHint?: string
 }
+
+/* ---------- 平台层：任务队列 / 环境探测 / 文件夹展开 / 撤销 ---------- */
+
+/** 主进程按文件循环的任务快照，经 task:update 推给渲染层 TaskDock */
+export interface TaskSnapshot {
+  id: number
+  label: string
+  done: number
+  total: number
+  state: 'running' | 'done' | 'error'
+}
+
+/** 本机 Office/WPS 组件与中文字体探测结果 */
+export interface EnvProbe {
+  word: string
+  excel: string
+  ppt: string
+  /** 命中的中文字体文件名（按水印优先级） */
+  cjkFonts: string[]
+  watermarkReady: boolean
+  probedAt: number
+}
+
+/** 拖入路径混合展开的结果 */
+export interface ExpandPathsResult {
+  files: string[]
+  /** 展开的目录数 */
+  dirs: number
+  /** 类型不符或不可访问而被丢弃的条目数 */
+  rejected: number
+  truncated: boolean
+}
+
+export type UndoKind = 'rename' | 'organize'
+
+/** 某类操作最近一次可撤销的摘要 */
+export interface UndoState {
+  dir: string
+  time: number
+  count: number
+}
+
+export interface UndoResult {
+  undone: number
+  /** 执行后被用户挪走、无需还原的条目 */
+  skipped: number
+  failed: Array<{ path: string; reason: string }>
+}

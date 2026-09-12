@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { HomeFilled, Search, Setting } from '@element-plus/icons-vue'
 import CommandPalette from './components/CommandPalette.vue'
+import TaskDock from './components/TaskDock.vue'
 import { groupedTools, toolByPath, type ToolDef } from './tools'
 import { favorites } from './utils/settings'
 
@@ -98,6 +99,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
     </el-main>
 
     <CommandPalette v-model="paletteOpen" />
+    <TaskDock />
   </el-container>
 </template>
 

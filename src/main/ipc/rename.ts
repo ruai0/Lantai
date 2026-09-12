@@ -10,6 +10,7 @@ import type {
 import { handle } from './wrapper'
 import { buildRenamePlan, filterByExts } from '../services/renameService'
 import { buildOrganizePlan } from '../services/organizeService'
+import { undoLast, undoState, writeJournal, type UndoKind, type UndoOp } from '../services/undoJournal'
 
 handle('file:rename-plan', (p: RenamePlanParams) => {
   const entries = fs.readdirSync(p.dir, { withFileTypes: true })
@@ -21,15 +22,22 @@ handle('file:rename-plan', (p: RenamePlanParams) => {
 
 handle('file:rename-apply', (p: RenameApplyParams) => {
   let count = 0
-  for (const pair of p.pairs) {
-    if (pair.from === pair.to) continue
-    const from = path.join(p.dir, pair.from)
-    const to = path.join(p.dir, pair.to)
-    if (fs.existsSync(to)) throw new Error(`目标已存在，已中止：${pair.to}（此前已完成 ${count} 个）`)
-    fs.renameSync(from, to)
-    count++
+  const ops: UndoOp[] = []
+  try {
+    for (const pair of p.pairs) {
+      if (pair.from === pair.to) continue
+      const from = path.join(p.dir, pair.from)
+      const to = path.join(p.dir, pair.to)
+      if (fs.existsSync(to)) throw new Error(`目标已存在，已中止：${pair.to}（此前已完成 ${count} 个）`)
+      fs.renameSync(from, to)
+      ops.push({ from, to })
+      count++
+    }
+  } finally {
+    // 异常中止也落盘，撤销可恢复半截现场
+    writeJournal('rename', p.dir, ops)
   }
-  return { count }
+  return { count, undoable: ops.length }
 })
 
 handle('file:organize-plan', (p: OrganizePlanParams) => {
@@ -52,13 +60,24 @@ handle('file:organize-plan', (p: OrganizePlanParams) => {
 
 handle('file:organize-apply', (p: OrganizeApplyParams) => {
   let count = 0
-  for (const pair of p.pairs) {
-    const from = path.join(p.dir, pair.from)
-    const to = path.join(p.dir, pair.to)
-    fs.mkdirSync(path.dirname(to), { recursive: true })
-    if (fs.existsSync(to)) throw new Error(`目标已存在，已中止：${pair.to}（此前已完成 ${count} 个）`)
-    fs.renameSync(from, to)
-    count++
+  const ops: UndoOp[] = []
+  try {
+    for (const pair of p.pairs) {
+      const from = path.join(p.dir, pair.from)
+      const to = path.join(p.dir, pair.to)
+      fs.mkdirSync(path.dirname(to), { recursive: true })
+      if (fs.existsSync(to)) throw new Error(`目标已存在，已中止：${pair.to}（此前已完成 ${count} 个）`)
+      fs.renameSync(from, to)
+      ops.push({ from, to })
+      count++
+    }
+  } finally {
+    writeJournal('organize', p.dir, ops)
   }
-  return { count }
+  return { count, undoable: ops.length }
 })
+
+/* ---------- 撤销（#6）：每类操作只保留最近一次 ---------- */
+
+handle('file:undo-last', (p: { kind: UndoKind }) => undoLast(p.kind))
+handle('file:undo-state', () => undoState())

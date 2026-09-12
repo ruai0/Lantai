@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
-import { call, basename } from '../utils/api'
+import { call, callQ, basename } from '../utils/api'
 import type { DuplicateGroup } from '@shared/types'
 
 const tab = ref<'inventory' | 'duplicates' | 'zip'>('inventory')
@@ -135,8 +135,9 @@ async function runZip() {
         ElMessage.warning('请先选择要打包的文件夹')
         return
       }
-      const r = await call(
-        api.zipPack({ dir: zipSourceDir.value, zipName: zipName.value, outDir: dir }),
+      const r = await callQ(
+        'ZIP 打包',
+        () => api.zipPack({ dir: zipSourceDir.value, zipName: zipName.value, outDir: dir }),
         '打包完成'
       )
       if (r) zipOutputs.value = [r.outputPath]

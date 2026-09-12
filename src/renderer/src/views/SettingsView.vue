@@ -6,14 +6,28 @@ import { Delete, FolderChecked, Setting } from '@element-plus/icons-vue'
 import StepCard from '../components/StepCard.vue'
 import { basename } from '../utils/api'
 import { clearHistory, history, settings, updateSettings } from '../utils/settings'
+import type { EnvProbe } from '@shared/types'
 import type { OnComplete, Theme } from '@shared/settings'
 
 const version = ref('')
 const loadingDir = ref(false)
+const probe = ref<EnvProbe | null>(null)
+const probing = ref(false)
+
+async function loadProbe(force = false) {
+  probing.value = true
+  try {
+    const r = await api.probe({ force })
+    if (r.ok) probe.value = r.data
+  } finally {
+    probing.value = false
+  }
+}
 
 onMounted(async () => {
   const v = await api.getVersion()
   if (v.ok) version.value = v.data
+  void loadProbe()
 })
 
 async function pickDefaultDir() {
@@ -110,7 +124,26 @@ function fmtTime(t: number): string {
       </el-radio-group>
     </StepCard>
 
-    <StepCard :step="4" title="使用历史">
+    <StepCard :step="4" title="本机环境">
+      <template #head-extra>
+        <el-button link type="primary" size="small" style="margin-left: 12px" :loading="probing" @click="loadProbe(true)">
+          重新探测
+        </el-button>
+      </template>
+      <div v-if="probe" class="probe-grid">
+        <div class="probe-item"><span>Word 组件</span><b :class="{ 'probe-bad': probe.word.includes('未') }">{{ probe.word }}</b></div>
+        <div class="probe-item"><span>Excel 组件</span><b :class="{ 'probe-bad': probe.excel.includes('未') }">{{ probe.excel }}</b></div>
+        <div class="probe-item"><span>PPT 组件</span><b :class="{ 'probe-bad': probe.ppt.includes('未') }">{{ probe.ppt }}</b></div>
+        <div class="probe-item">
+          <span>中文水印</span>
+          <b :class="{ 'probe-bad': !probe.watermarkReady }">{{ probe.watermarkReady ? `可用（${probe.cjkFonts[0]}）` : '缺中文字体' }}</b>
+        </div>
+      </div>
+      <p v-else class="hint">{{ probing ? '正在探测本机 Office/WPS 组件与字体…' : '尚未探测。' }}</p>
+      <p class="hint">「Office 转 PDF」与「PDF 中文水印」依赖以上环境；内网装机验收时先看这里，报错时也请连诊断信息一起反馈。</p>
+    </StepCard>
+
+    <StepCard :step="5" title="使用历史">
       <template #head-extra>
         <el-button v-if="history.length" link type="danger" size="small" style="margin-left: 12px" @click="wipeHistory">
           清空
@@ -180,6 +213,31 @@ function fmtTime(t: number): string {
 .hist-more {
   font-size: 12px;
   color: var(--text-3);
+}
+.probe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+}
+.probe-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.probe-item b {
+  color: var(--text-1);
+  font-weight: 500;
+  text-align: right;
+}
+.probe-bad {
+  color: var(--el-color-danger, #f56c6c) !important;
 }
 .about {
   display: flex;

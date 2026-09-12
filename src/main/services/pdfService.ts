@@ -46,13 +46,18 @@ async function save(doc: PDFDocument, outDir: string, filename: string): Promise
   return out
 }
 
-export async function mergePdfs(params: PdfMergeParams): Promise<PdfResult> {
+export async function mergePdfs(
+  params: PdfMergeParams,
+  onProgress?: (done: number, total: number) => void
+): Promise<PdfResult> {
   if (params.paths.length < 2) throw new Error('合并至少需要选择两个 PDF 文件')
   const merged = await PDFDocument.create()
+  let done = 0
   for (const p of params.paths) {
     const src = await loadPdf(p)
     const pages = await merged.copyPages(src, src.getPageIndices())
     pages.forEach(pg => merged.addPage(pg))
+    onProgress?.(++done, params.paths.length)
   }
   const out = await save(merged, params.outDir, `PDF合并_${stamp()}.pdf`)
   return { outputs: [out] }

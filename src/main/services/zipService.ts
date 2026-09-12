@@ -18,7 +18,10 @@ function walk(dir: string, root: string, out: WalkedFile[]): void {
 }
 
 /** 把整个文件夹打包成一个 zip（保持子文件夹结构） */
-export async function packZip(params: ZipPackParams): Promise<{ outputPath: string; count: number }> {
+export async function packZip(
+  params: ZipPackParams,
+  onProgress?: (done: number, total: number) => void
+): Promise<{ outputPath: string; count: number }> {
   if (!fs.existsSync(params.dir) || !fs.statSync(params.dir).isDirectory()) {
     throw new Error('请选择要打包的文件夹')
   }
@@ -26,8 +29,10 @@ export async function packZip(params: ZipPackParams): Promise<{ outputPath: stri
   walk(params.dir, params.dir, files)
   if (files.length === 0) throw new Error('该文件夹里没有文件')
   const zip = new PizZip()
+  let done = 0
   for (const f of files) {
     zip.file(f.relPath, fs.readFileSync(f.fullPath), { binary: true })
+    onProgress?.(++done, files.length)
   }
   const name = (params.zipName?.trim() || path.basename(params.dir) || 'archive') + '.zip'
   const content = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })

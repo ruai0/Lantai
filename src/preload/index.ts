@@ -4,7 +4,6 @@ import { plain } from '../shared/serialize'
 /** 统一入口：把 Vue 的 Proxy/ref 转成可结构化克隆的纯数据 */
 const invoke = (channel: string, ...args: unknown[]): Promise<unknown> =>
   ipcRenderer.invoke(channel, ...args.map(a => plain(a)))
-
 const api = {
   /** 拖拽进来的 File → 真实路径（Electron 32+ 移除了 File.path，必须走 webUtils） */
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
@@ -59,7 +58,17 @@ const api = {
   addHistory: (entry: unknown) => invoke('history:add', entry),
   clearHistory: () => invoke('history:clear'),
   notify: (p: unknown) => invoke('app:notify', p),
-  diagnostics: () => invoke('app:diagnostics')
+  diagnostics: () => invoke('app:diagnostics'),
+  probe: (p?: unknown) => invoke('app:probe', p),
+  expandPaths: (p: unknown) => invoke('file:expand-paths', p),
+  undoLast: (p: unknown) => invoke('file:undo-last', p),
+  undoState: () => invoke('file:undo-state'),
+  /** 订阅主进程任务进度；返回取消订阅函数（contextBridge 支持传函数回调） */
+  onTaskUpdate: (cb: (list: unknown[]) => void): (() => void) => {
+    const listener = (_e: unknown, list: unknown[]): void => cb(list)
+    ipcRenderer.on('task:update', listener)
+    return () => ipcRenderer.removeListener('task:update', listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

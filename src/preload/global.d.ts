@@ -54,6 +54,14 @@ import type {
   ZipUnpackParams,
   ZipUnpackResult
 } from '../shared/types'
+import type {
+  EnvProbe,
+  ExpandPathsResult,
+  TaskSnapshot,
+  UndoKind,
+  UndoResult,
+  UndoState
+} from '../shared/types'
 import type { AppSettings, HistoryEntry } from '../shared/settings'
 
 export interface FreeToolApi {
@@ -99,9 +107,9 @@ export interface FreeToolApi {
   scanTemplate(p: TemplateScanParams): Promise<ApiResult<{ fields: string[] }>>
   previewData(p: { dataPath: string }): Promise<ApiResult<DataPreview>>
   renamePlan(p: RenamePlanParams): Promise<ApiResult<{ plan: RenamePair[] }>>
-  renameApply(p: RenameApplyParams): Promise<ApiResult<{ count: number }>>
+  renameApply(p: RenameApplyParams): Promise<ApiResult<{ count: number; undoable: number }>>
   organizePlan(p: OrganizePlanParams): Promise<ApiResult<{ plan: OrganizePair[] }>>
-  organizeApply(p: OrganizeApplyParams): Promise<ApiResult<{ count: number }>>
+  organizeApply(p: OrganizeApplyParams): Promise<ApiResult<{ count: number; undoable: number }>>
   hashFiles(p: HashParams): Promise<ApiResult<HashResult[]>>
   getSettings(): Promise<ApiResult<AppSettings>>
   setSettings(patch: Partial<AppSettings>): Promise<ApiResult<AppSettings>>
@@ -111,6 +119,12 @@ export interface FreeToolApi {
   clearHistory(): Promise<ApiResult<HistoryEntry[]>>
   notify(p: { title: string; body: string }): Promise<ApiResult<boolean>>
   diagnostics(): Promise<ApiResult<Record<string, string | number>>>
+  probe(p?: { force?: boolean }): Promise<ApiResult<EnvProbe>>
+  expandPaths(p: { paths: string[]; exts?: string[]; max?: number }): Promise<ApiResult<ExpandPathsResult>>
+  undoLast(p: { kind: UndoKind }): Promise<ApiResult<UndoResult>>
+  undoState(): Promise<ApiResult<Record<UndoKind, UndoState | null>>>
+  /** 订阅主进程任务进度推送；返回取消订阅函数 */
+  onTaskUpdate(cb: (list: TaskSnapshot[]) => void): () => void
 }
 
 declare global {

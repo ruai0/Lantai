@@ -2,6 +2,8 @@
 
 桌面级办公工具箱（Windows / Electron + Vue3 + TypeScript + Element Plus）。全部功能**离线本地处理**，文件不出电脑。
 
+> **系统要求**：Windows 10 及以上、x64（Electron 44 不支持 Win7/8，旧系统安装后无法启动）。
+
 ## 功能（v0.5）
 
 | 工具 | 能力 |
@@ -25,6 +27,8 @@
 - **任务完成后**：仅提示 / 打开所在文件夹 / 打开输出文件，统一所有导出类操作的行为。
 - **外观**：浅色 / 深色 / 跟随系统；深色只翻转纸面/文字/线条令牌，墨蓝侧栏与琥珀信号色两主题通用。
 - **使用历史**：每次产出任务自动记录（功能、时间、输出路径），点击直达；最多 100 条，可清空。
+- **本机环境**：检测 Word / Excel / PPT 的 Microsoft / WPS 组件与中文水印字体是否齐全，结果同时计入诊断信息。
+- **软件更新**：配置更新源后自动检查升级，留空则应用永不发起网络请求（见「发布与更新」）。
 
 ## 界面设计
 
@@ -34,7 +38,7 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 - 字体：标题与技术编号用 Windows 自带的 `Bahnschrift`（DIN 风格窄体，离线可用），正文保留 `Microsoft YaHei / PingFang SC` 保证中文可读性，文件名与数值用等宽 `Cascadia Mono / Consolas`。
 - 功能页共用的类名（`step-card`、`step-no`、`file-list`、`tool-grid`、`form-row` 等）保持不变，新增页面沿用即可自动获得同一套观感。
 - 已适配 `prefers-reduced-motion`，窄屏下隐藏横幅仪表装饰并收紧留白。
-- 所有文件选择区支持**拖拽导入**：把文件拖到虚线框即加入列表（按各功能的类型过滤，目录外拖入不会误触发页面导航）。
+- 所有文件选择区支持**拖拽导入**：文件、整个文件夹都能直接拖到虚线框（目录自动递归展开，按各功能的类型过滤，2000 个封顶；拖入不会误触发页面导航）。
 
 ## 运维与排障
 
@@ -42,6 +46,22 @@ v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 +
 - 单实例：重复启动不会开第二个窗口，而是聚焦已有窗口。
 - 窗口尺寸/位置自动记忆（`%APPDATA%/FreeTool/window-state.json`），换显示器后旧坐标失效时自动回退居中。
 - 应用图标由 `npm run gen:icon` 生成（build/icon.png + icon.ico），设计语言与界面一致。
+
+## 发布与更新
+
+**发布（维护者）**：一条命令完成 版本号 → 提交 → git tag → 安装包 → 校验和。
+
+```bash
+# 1. 先在 CHANGELOG.md 写好 "## [0.6.0]" 段落并提交，工作区保持干净
+npm run release 0.6.0
+# 产物：release/freetool-setup-0.6.0.exe、freetool-portable-0.6.0.exe、latest.yml、*.blockmap、SHA256SUMS.txt
+```
+
+**更新源**：把上述产物上传到任一 **HTTP(S) 静态可访问**的位置即可——GitHub Releases（用户填 `https://github.com/<owner>/<repo>`）、内网 nginx/IIS 目录、网盘的直链镜像站均可。
+
+**用户侧**：「设置 → 软件更新」填入更新源地址。之后应用启动 5 秒静默检查一次，发现新版自动后台下载，右下角提示「重启安装」；也可随时手动「检查更新」。**更新源留空 = 完全关闭更新行为，应用不发起任何网络请求**（适合离线机器）。
+
+**未签名说明**：本项目不做代码签名。全新下载 exe 在部分 Windows 上会遇 SmartScreen 蓝屏拦截——点「更多信息 → 仍要运行」即可；应用内「重启安装」的更新流程在本地执行，一般不触发该拦截。分发时建议连 `SHA256SUMS.txt` 一起给到，接收方可用 `certutil -hashfile <文件> SHA256` 校验。
 
 ## 开发
 
@@ -51,8 +71,9 @@ npm run dev      # 开发模式（热更新）
 npm run build    # 构建到 out/
 npm run typecheck
 npm run test     # vitest 单测 + 临时目录集成冒烟测试
-npm run test:ui  # 一键 UI 冒烟：自动构建测试包→起 CDP→跑 9 组真实界面场景→关（约 10 秒）
+npm run test:ui  # 一键 UI 冒烟：自动构建测试包→起 CDP→跑 11 组真实界面场景→关（约 10 秒）
 npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
+npm run release <版本号>  # 完整发版流程（见「发布与更新」）
 ```
 
 > 前提：Node ≥ 18 且 `node` 在 PATH 中。若 npm 报「'node' 不是内部或外部命令」，确认 node.exe 所在目录（如 `J:\node_js`）已加入系统 PATH。
@@ -61,7 +82,7 @@ npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
 
 1. `FT_TEST_HOOKS=1 npm run build` 构建带组件实例钩子的测试包（正式构建不带，产物无此钩子）
 2. `node_modules/electron/dist/electron.exe . --remote-debugging-port=9222` 启动
-3. `node scripts/cdp.mjs .ftest/ui-organize.js`（或 ui-drag / ui-pdf3 / ui-image / ui-tools / ui-filekit / ui-match / ui-diff / ui-settings）逐个流程验证；测试素材用 `node scripts/make-fixtures.mjs` 生成
+3. `node scripts/cdp.mjs .ftest/ui-organize.js`（或 ui-drag / ui-pdf3 / ui-image / ui-tools / ui-filekit / ui-match / ui-diff / ui-settings / ui-palette / ui-platform）逐个流程验证；测试素材用 `node scripts/make-fixtures.mjs` 生成
 
 ## 架构
 
@@ -99,6 +120,7 @@ src/
 - ZIP 打包生成的 zip 用 UTF-8 文件名，老版 WinRAR/XP 解压可能显示乱码（Windows 10+ 资源管理器正常）。
 - 图片处理走 Canvas，超大图（>50MP）内存占用较高；avif 编码、HEIC 解码暂不支持。
 - PDF 转图片/提取文字/压缩按整页逐页处理，数百页大文件耗时较长。
+- 安装包未做代码签名（见「发布与更新」的 SmartScreen 说明）；更新要求旧版与新版都用 NSIS 安装版，便携版不参与自动更新。
 
 ## 设计文档
 

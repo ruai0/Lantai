@@ -64,6 +64,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: '兰台 办公工具箱',
+    icon: path.join(__dirname, '../renderer/logo.png'), // 任务栏/dev 模式图标；打包后 exe 图标由 electron-builder 注入
     backgroundColor: '#f5f7fa',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js')

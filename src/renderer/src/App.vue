@@ -8,6 +8,7 @@ import TaskDock from './components/TaskDock.vue'
 import DebugDialog from './components/DebugDialog.vue'
 import CloseChoiceDialog from './components/CloseChoiceDialog.vue'
 import WelcomeDialog from './components/WelcomeDialog.vue'
+import logoUrl from './assets/logo.png'
 import { groupedTools, toolByPath, type ToolDef } from './tools'
 import { favorites, settings } from './utils/settings'
 import { api } from './utils/ipc'
@@ -95,7 +96,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   <el-container class="app-shell">
     <el-aside width="214px" class="app-aside">
       <div class="brand" @click="$router.push('/')">
-        <div class="brand-mark" />
+        <img class="brand-mark" :src="logoUrl" alt="" />
         <div class="brand-text">
           <div class="brand-word">兰台</div>
           <div class="brand-sub">办公工具箱</div>

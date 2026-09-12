@@ -1,4 +1,4 @@
-import { app, Notification, shell } from 'electron'
+import { app, nativeImage, Notification, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -8,6 +8,16 @@ import { getSettings } from '../services/settingsService'
 import { logMain } from '../services/log'
 import { DEFAULT_UPDATE_FEED } from './update'
 import { quitApp } from '../quit'
+
+/** 通知图标：renderer 里的 logo（打包随 asar 分发） */
+function appIcon(): Electron.NativeImage | undefined {
+  try {
+    const p = path.join(__dirname, '../renderer/logo.png')
+    return fs.existsSync(p) ? nativeImage.createFromPath(p) : undefined
+  } catch {
+    return undefined
+  }
+}
 import { probeEnv } from '../services/envProbe'
 
 interface NotifyParams {
@@ -18,7 +28,7 @@ interface NotifyParams {
 /** 系统通知（Windows toast）；点击唤起主窗口。仅当渲染层判断窗口不在前台时才调用 */
 handle('app:notify', (p: NotifyParams): boolean => {
   if (!Notification.isSupported()) return false
-  const n = new Notification({ title: p.title, body: p.body, silent: false })
+  const n = new Notification({ title: p.title, body: p.body, silent: false, icon: appIcon() })
   n.on('click', () => focusMainWindow())
   n.show()
   return true

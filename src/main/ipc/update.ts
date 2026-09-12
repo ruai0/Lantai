@@ -1,4 +1,6 @@
-import { app, BrowserWindow, Notification } from 'electron'
+import { app, BrowserWindow, nativeImage, Notification } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
 import { autoUpdater } from 'electron-updater'
 import type { NsisUpdater, UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '@shared/types'
@@ -23,7 +25,14 @@ let toastOnResult = false
 
 function toast(title: string, body: string): void {
   if (!Notification.isSupported()) return
-  const n = new Notification({ title, body })
+  let icon: Electron.NativeImage | undefined
+  try {
+    const p = path.join(__dirname, '../renderer/logo.png')
+    if (fs.existsSync(p)) icon = nativeImage.createFromPath(p)
+  } catch {
+    /* 无图标也可用 */
+  }
+  const n = new Notification({ title, body, icon })
   n.on('click', () => {
     for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.show()
   })

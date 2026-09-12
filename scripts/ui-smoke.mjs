@@ -47,7 +47,12 @@ const SCENARIOS = [
       r.mergedTwice &&
       r.updateStateOk &&
       r.updateCheckOk &&
-      r.updateCardShown
+      r.updateCardShown &&
+      r.authorShown &&
+      r.debugOpened &&
+      r.debugClosed &&
+      r.diagHasFeed &&
+      r.traySwitchShown
   },
   {
     file: 'ui-settings.js',

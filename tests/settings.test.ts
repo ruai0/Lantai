@@ -22,4 +22,10 @@ describe('设置归一化 normalizeSettings', () => {
     expect(normalizeSettings({ updateFeed: 123 }).updateFeed).toBe('')
     expect(normalizeSettings({ updateFeed: null }).updateFeed).toBe('')
   })
+
+  it('minimizeToTray 默认开（旧配置无此字段 → true），显式 false 才退出', () => {
+    expect(DEFAULT_SETTINGS.minimizeToTray).toBe(true)
+    expect(normalizeSettings({}).minimizeToTray).toBe(true)
+    expect(normalizeSettings({ minimizeToTray: false }).minimizeToTray).toBe(false)
+  })
 })

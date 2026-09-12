@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import { groupedTools, toolByPath, type ToolDef } from '../tools'
 import { favorites, isFavorite, toggleFavorite } from '../utils/settings'
+import { api } from '../utils/ipc'
 
 const router = useRouter()
+
+const version = ref('')
+onMounted(() => {
+  void api.getVersion().then(r => {
+    if (r.ok) version.value = r.data
+  })
+})
+
+function openRepo(): void {
+  void api.openExternal('https://github.com/ruai0/Lantai')
+}
 
 let seq = 0
 const indexed = computed(() =>
@@ -125,6 +137,11 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
         </el-card>
       </div>
     </section>
+
+    <footer class="home-foot">
+      <span>兰台（Lantai）v{{ version }} · © 2026 <b>ruai1024</b> · MIT License</span>
+      <a class="home-foot-link" title="项目主页" @click="openRepo">github.com/ruai0/Lantai ↗</a>
+    </footer>
   </div>
 </template>
 
@@ -156,6 +173,31 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
 }
 .tool-card--fav .tool-star {
   opacity: 1;
+  color: var(--amber);
+}
+.home-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 34px 0 8px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.home-foot b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.home-foot-link {
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+.home-foot-link:hover {
   color: var(--amber);
 }
 </style>

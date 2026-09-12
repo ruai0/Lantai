@@ -5,6 +5,7 @@ import { ElNotification } from 'element-plus'
 import { HomeFilled, Search, Setting } from '@element-plus/icons-vue'
 import CommandPalette from './components/CommandPalette.vue'
 import TaskDock from './components/TaskDock.vue'
+import DebugDialog from './components/DebugDialog.vue'
 import { groupedTools, toolByPath, type ToolDef } from './tools'
 import { favorites } from './utils/settings'
 import { api } from './utils/ipc'
@@ -38,6 +39,28 @@ watch(
 )
 
 const paletteOpen = ref(false)
+const debugOpen = ref(false)
+
+/** 隐藏调试口令：任意处（非输入框）连续键入 lantai 弹出调试面板 */
+const SECRET = 'lantai'
+let secretBuf = ''
+
+function onGlobalKey(e: KeyboardEvent): void {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
+    return
+  }
+  const t = e.target as HTMLElement | null
+  const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || !!t.isContentEditable)
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return
+  if (!/^[a-zA-Z]$/.test(e.key)) return
+  secretBuf = (secretBuf + e.key.toLowerCase()).slice(-SECRET.length)
+  if (secretBuf === SECRET) {
+    secretBuf = ''
+    debugOpen.value = !debugOpen.value
+  }
+}
 
 interface NavGroup {
   title: string
@@ -56,12 +79,6 @@ const favGroup = computed<NavGroup | null>(() => {
   return items.length ? { title: '收藏', items } : null
 })
 
-function onGlobalKey(e: KeyboardEvent): void {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    paletteOpen.value = !paletteOpen.value
-  }
-}
 onMounted(() => window.addEventListener('keydown', onGlobalKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
@@ -116,7 +133,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       <div class="rail-status">
         <i class="pulse" />
         <span>本机离线处理</span>
-        <span class="rail-ver">v{{ appVersion }}</span>
+        <span class="rail-ver">v{{ appVersion }} · by ruai1024</span>
       </div>
     </el-aside>
     <el-main class="app-main">
@@ -127,6 +144,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
     <CommandPalette v-model="paletteOpen" />
     <TaskDock />
+    <DebugDialog v-model="debugOpen" />
   </el-container>
 </template>
 

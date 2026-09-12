@@ -119,6 +119,10 @@ export interface LantaiApi {
   addHistory(entry: HistoryEntry): Promise<ApiResult<HistoryEntry[]>>
   clearHistory(): Promise<ApiResult<HistoryEntry[]>>
   notify(p: { title: string; body: string }): Promise<ApiResult<boolean>>
+  /** 用系统默认浏览器打开 http(s) 链接 */
+  openExternal(url: string): Promise<ApiResult<boolean>>
+  /** 开/关 DevTools（独立窗口），返回操作后的开启状态 */
+  toggleDevtools(): Promise<ApiResult<boolean>>
   diagnostics(): Promise<ApiResult<Record<string, string | number>>>
   probe(p?: { force?: boolean }): Promise<ApiResult<EnvProbe>>
   expandPaths(p: { paths: string[]; exts?: string[]; max?: number }): Promise<ApiResult<ExpandPathsResult>>

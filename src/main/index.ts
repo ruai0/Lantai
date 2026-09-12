@@ -3,9 +3,10 @@ import path from 'node:path'
 import './ipc'
 import { installCrashLogging, logMain } from './services/log'
 import { clampToDisplays, loadWindowState, watchWindowState } from './services/windowState'
-import { focusMainWindow, setMainWindow } from './mainWindow'
+import { focusMainWindow, getMainWindow, setMainWindow } from './mainWindow'
 import { initAutoUpdater } from './ipc/update'
 import { migrateLegacyUserData } from './services/migrate'
+import { getSettings } from './services/settingsService'
 
 // Windows 通知归属与 NSIS 快捷方式的 AUMID 保持一致（打包安装器写入的是 build.appId）
 app.setAppUserModelId('com.ruai1024.lantai')
@@ -13,6 +14,15 @@ migrateLegacyUserData()
 installCrashLogging()
 
 let tray: Tray | null = null
+/** 只有托盘菜单/更新安装走这里；否则点关闭只是收进托盘 */
+let isQuitting = false
+let trayHintShown = false
+
+function quitApp(): void {
+  isQuitting = true
+  app.quit()
+}
+app.on('before-quit', () => (isQuitting = true))
 
 // 单实例：第二次启动时聚焦已有窗口而不是再开一个
 if (!app.requestSingleInstanceLock()) {
@@ -21,20 +31,32 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => focusMainWindow())
 }
 
+function toggleMainWindow(): void {
+  const win = getMainWindow()
+  if (!win) {
+    createWindow()
+    return
+  }
+  if (win.isVisible() && win.isFocused()) win.hide()
+  else focusMainWindow()
+}
+
 function createTray(): void {
   if (tray) return
   try {
     const icon = nativeImage.createFromPath(path.join(__dirname, '../renderer/tray.png')).resize({ width: 16, height: 16 })
     tray = new Tray(icon)
-    tray.setToolTip('兰台 办公工具箱')
+    tray.setToolTip('兰台 办公工具箱（右键菜单可退出）')
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '显示主窗口', click: () => focusMainWindow() },
         { type: 'separator' },
-        { label: '退出', click: () => app.quit() }
+        { label: '退出 兰台', click: quitApp }
       ])
     )
-    tray.on('click', () => focusMainWindow())
+    // Windows 上单击即触发 click；双击额外兜底
+    tray.on('click', () => toggleMainWindow())
+    tray.on('double-click', () => focusMainWindow())
   } catch (e) {
     logMain('warn', `托盘创建失败：${e instanceof Error ? e.message : String(e)}`)
   }
@@ -57,6 +79,21 @@ function createWindow(): BrowserWindow {
 
   win.on('ready-to-show', () => win.show())
   watchWindowState(win)
+
+  // 关闭按钮 = 收进托盘（可在设置里改回直接退出）；真退出由 isQuitting 放行
+  win.on('close', e => {
+    if (isQuitting || !tray || !getSettings().minimizeToTray) return
+    e.preventDefault()
+    win.hide()
+    if (!trayHintShown) {
+      trayHintShown = true
+      tray.displayBalloon({
+        title: '兰台仍在后台运行',
+        content: '已最小化到右下角托盘：单击图标恢复窗口，右键「退出 兰台」才会真正关闭。',
+        iconType: 'info'
+      })
+    }
+  })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)

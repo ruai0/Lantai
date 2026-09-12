@@ -1,10 +1,11 @@
-import { app, Notification } from 'electron'
+import { app, Notification, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { handle } from './wrapper'
-import { focusMainWindow } from '../mainWindow'
+import { focusMainWindow, getMainWindow } from '../mainWindow'
 import { getSettings } from '../services/settingsService'
+import { DEFAULT_UPDATE_FEED } from './update'
 import { probeEnv } from '../services/envProbe'
 
 interface NotifyParams {
@@ -18,6 +19,25 @@ handle('app:notify', (p: NotifyParams): boolean => {
   const n = new Notification({ title: p.title, body: p.body, silent: false })
   n.on('click', () => focusMainWindow())
   n.show()
+  return true
+})
+
+/** 外部浏览器打开链接（仅 http/https，作者主页等） */
+handle('shell:open-external', (url: string): boolean => {
+  if (!/^https?:\/\//i.test(url)) throw new Error('仅允许打开 http(s) 链接')
+  void shell.openExternal(url)
+  return true
+})
+
+/** 隐藏调试入口用：开/关 DevTools（独立窗口模式），返回操作后状态 */
+handle('app:toggle-devtools', (): boolean => {
+  const win = getMainWindow()
+  if (!win) return false
+  if (win.webContents.isDevToolsOpened()) {
+    win.webContents.closeDevTools()
+    return false
+  }
+  win.webContents.openDevTools({ mode: 'detach' })
   return true
 })
 
@@ -58,6 +78,7 @@ handle('app:diagnostics', async (): Promise<Record<string, string | number>> => 
     defaultOutDir: s.defaultOutDir || '(未设置)',
     favorites: s.favorites.length,
     notify: s.notify ? '开' : '关',
+    updateFeed: s.updateFeed.trim() || DEFAULT_UPDATE_FEED,
     officeWord: probe?.word ?? '未探测',
     officeExcel: probe?.excel ?? '未探测',
     officePpt: probe?.ppt ?? '未探测',

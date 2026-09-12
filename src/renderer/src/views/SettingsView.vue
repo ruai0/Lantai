@@ -106,6 +106,14 @@ async function toggleNotify(v: boolean | string | number) {
   await updateSettings({ notify: v === true })
 }
 
+async function toggleTrayClose(v: boolean | string | number) {
+  await updateSettings({ minimizeToTray: v === true })
+}
+
+function openRepo() {
+  void api.openExternal('https://github.com/ruai0/Lantai')
+}
+
 async function copyDiagnostics() {
   const res = await api.diagnostics()
   if (!res.ok) {
@@ -163,6 +171,10 @@ function fmtTime(t: number): string {
       <div class="notify-row">
         <span>窗口不在前台时，任务完成弹系统通知</span>
         <el-switch :model-value="settings.notify" @change="toggleNotify" />
+      </div>
+      <div class="notify-row">
+        <span>点关闭按钮时收进右下角托盘（不退出，右键托盘图标可选「退出」）</span>
+        <el-switch :model-value="settings.minimizeToTray" @change="toggleTrayClose" />
       </div>
     </StepCard>
 
@@ -244,9 +256,11 @@ function fmtTime(t: number): string {
 
     <div class="about">
       <el-icon><Setting /></el-icon>
-      <span>兰台 办公工具箱 v{{ version }}</span>
+      <span>兰台（Lantai）v{{ version }}</span>
       <span class="about-dot">·</span>
-      <span>本机离线处理，文件不出电脑</span>
+      <span>© 2026 <b>ruai1024</b> · MIT License</span>
+      <span class="about-dot">·</span>
+      <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
       <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>
     </div>
   </div>
@@ -348,5 +362,20 @@ function fmtTime(t: number): string {
 }
 .about-dot {
   color: var(--text-3);
+}
+.about b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.about-link {
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-decoration: none;
+}
+.about-link:hover {
+  color: var(--amber);
+  text-decoration: underline;
 }
 </style>

@@ -10,6 +10,10 @@ export function setMainWindow(win: BrowserWindow): void {
   })
 }
 
+export function getMainWindow(): BrowserWindow | null {
+  return mainWin && !mainWin.isDestroyed() ? mainWin : null
+}
+
 export function focusMainWindow(): void {
   if (!mainWin || mainWin.isDestroyed()) return
   if (mainWin.isMinimized()) mainWin.restore()

@@ -21,6 +21,19 @@ const SCENARIOS = [
   { file: 'ui-match.js', name: '匹配填充/差异比对', check: r => r.fill?.matched === 3 && r.compare?.changed === 1 },
   { file: 'ui-diff.js', name: '文本对比', check: r => r.changed === 1 && r.added === 1 },
   {
+    file: 'ui-palette.js',
+    name: '命令面板/收藏/诊断/通知',
+    check: r =>
+      r.paletteOpened &&
+      r.paletteGotoPdf &&
+      r.favPersisted &&
+      r.sidebarFavGroup &&
+      r.favRestored &&
+      r.diagOk &&
+      r.diagMsgShown &&
+      r.notifyOk
+  },
+  {
     file: 'ui-settings.js',
     name: '设置（主题/完成行为/默认目录）',
     check: r => r.versionShown && r.themeDark && r.themeLight && r.onCompletePersisted && r.defaultDirPrefilled

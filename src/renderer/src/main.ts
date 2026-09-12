@@ -15,9 +15,12 @@ window.addEventListener('dragover', e => e.preventDefault())
 window.addEventListener('drop', e => e.preventDefault())
 
 // 全局错误兜底：任何未捕获错误都落主进程日志并给用户一句人话提示（3 秒节流防刷屏）。
+// ResizeObserver loop 是 Chromium 在布局回环时的良性提示（窗口缩放常见），过滤掉。
+const IGNORED_ERRORS = /ResizeObserver loop/i
 let lastToastAt = 0
 function reportError(where: string, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err)
+  if (IGNORED_ERRORS.test(msg)) return
   void api.logError({ where, message: err instanceof Error ? `${msg}\n${err.stack ?? ''}` : msg })
   const now = Date.now()
   if (now - lastToastAt > 3000) {

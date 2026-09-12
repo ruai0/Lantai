@@ -123,7 +123,7 @@ function openReleaseNotes() {
 }
 
 async function copyDiagnostics() {
-  const res = await api.diagnostics()
+  const [res, dev] = await Promise.all([api.diagnostics(), api.devInfo()])
   if (!res.ok) {
     ElMessage.error(res.error)
     return
@@ -131,9 +131,11 @@ async function copyDiagnostics() {
   const text = Object.entries(res.data)
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n')
+  // 配置之外附上最近主日志：报障一次复制，环境+错误现场全到位
+  const tail = dev.ok && typeof dev.data.logTail === 'string' && dev.data.logTail !== '(无日志)' ? dev.data.logTail : ''
   try {
-    await navigator.clipboard.writeText(`兰台 诊断信息\n${text}`)
-    ElMessage.success('诊断信息已复制，可直接发给技术支持')
+    await navigator.clipboard.writeText(`兰台 诊断信息\n${text}${tail ? `\n\n—— 最近主日志 ——\n${tail}` : ''}`)
+    ElMessage.success('诊断信息与日志已复制，可直接发给技术支持')
   } catch {
     ElMessage.error('复制失败：剪贴板不可用，请截图或重试')
   }

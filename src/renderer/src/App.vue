@@ -12,7 +12,8 @@ import {
   HomeFilled,
   Picture,
   Promotion,
-  Search
+  Search,
+  Setting
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -47,6 +48,10 @@ const groups = [
       { path: '/filekit', label: '文件管理', icon: FolderChecked },
       { path: '/tools', label: '常用小工具', icon: CopyDocument }
     ]
+  },
+  {
+    title: '系统',
+    items: [{ path: '/settings', label: '设置', icon: Setting }]
   }
 ]
 </script>

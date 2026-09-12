@@ -19,7 +19,12 @@ const SCENARIOS = [
   { file: 'ui-tools.js', name: '二维码识别/拼音', check: r => String(r.decode?.result).includes('freetool-test') && !!r.pinyin },
   { file: 'ui-filekit.js', name: 'ZIP 打包解压', check: r => r.pack?.length > 0 && r.unpack?.length > 0 },
   { file: 'ui-match.js', name: '匹配填充/差异比对', check: r => r.fill?.matched === 3 && r.compare?.changed === 1 },
-  { file: 'ui-diff.js', name: '文本对比', check: r => r.changed === 1 && r.added === 1 }
+  { file: 'ui-diff.js', name: '文本对比', check: r => r.changed === 1 && r.added === 1 },
+  {
+    file: 'ui-settings.js',
+    name: '设置（主题/完成行为/默认目录）',
+    check: r => r.versionShown && r.themeDark && r.themeLight && r.onCompletePersisted && r.defaultDirPrefilled
+  }
 ]
 
 function run(cmd, args, opts = {}) {
@@ -51,6 +56,34 @@ async function waitForTarget(timeoutMs = 30000) {
   throw new Error('CDP 目标等待超时，查看 .ftest/ui-smoke-app.log')
 }
 
+/** 跑一个表达式文件，返回解析后的 JSON（失败/异常返回 null） */
+async function evalFile(file, outFile) {
+  try {
+    const fd = fs.openSync(outFile, 'w')
+    try {
+      await run(NODE, [path.join(ROOT, 'scripts/cdp.mjs'), file], { stdio: ['ignore', fd, 'inherit'] })
+    } finally {
+      fs.closeSync(fd)
+    }
+    return JSON.parse(fs.readFileSync(outFile, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+// CDP 目标出现 ≠ Vue 已挂载；等侧栏渲染出来再跑场景，避免首个场景抢跑超时
+async function waitForApp(timeoutMs = 20000) {
+  const ready = path.join(ROOT, '.ftest', 'ui-ready.js')
+  const out = path.join(ROOT, '.ftest', 'ui-smoke-ready.json')
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeoutMs) {
+    const r = await evalFile(ready, out)
+    if (r?.ready) return
+    await new Promise(r2 => setTimeout(r2, 400))
+  }
+  throw new Error('应用挂载等待超时（侧栏未渲染），查看 .ftest/ui-smoke-app.log')
+}
+
 async function main() {
   const filter = process.argv[2]
   const scenarios = filter ? SCENARIOS.filter(s => s.file.includes(filter) || s.name.includes(filter)) : SCENARIOS
@@ -80,19 +113,11 @@ async function main() {
   let failed = 0
   try {
     await waitForTarget()
+    await waitForApp()
     for (const s of scenarios) {
       const file = path.join(ROOT, '.ftest', s.file)
       const t0 = Date.now()
-      let result = null
-      try {
-        const out = path.join(ROOT, '.ftest', 'ui-smoke-last.json')
-        await run(NODE, [path.join(ROOT, 'scripts/cdp.mjs'), file], {
-          stdio: ['ignore', fs.openSync(out, 'w'), 'inherit']
-        })
-        result = JSON.parse(fs.readFileSync(out, 'utf8'))
-      } catch {
-        /* cdp 非零退出，result 保持 null */
-      }
+      const result = await evalFile(file, path.join(ROOT, '.ftest', 'ui-smoke-last.json'))
       const secs = ((Date.now() - t0) / 1000).toFixed(1)
       const ok = result && !result.fail && s.check(result)
       if (!ok) failed++

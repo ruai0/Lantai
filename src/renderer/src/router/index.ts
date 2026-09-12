@@ -13,7 +13,8 @@ const router = createRouter({
     { path: '/replace', name: 'replace', component: () => import('../views/ReplaceView.vue') },
     { path: '/rename', name: 'rename', component: () => import('../views/RenameView.vue') },
     { path: '/filekit', name: 'filekit', component: () => import('../views/FileKitView.vue') },
-    { path: '/tools', name: 'tools', component: () => import('../views/ToolsView.vue') }
+    { path: '/tools', name: 'tools', component: () => import('../views/ToolsView.vue') },
+    { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') }
   ]
 })
 

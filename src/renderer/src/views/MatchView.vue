@@ -126,7 +126,6 @@ async function runCompare() {
     )
     if (r) {
       compareResult.value = r
-      await api.openPath(r.outputPath)
     }
   } finally {
     running.value = false

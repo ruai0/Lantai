@@ -54,6 +54,7 @@ import type {
   ZipUnpackParams,
   ZipUnpackResult
 } from '../shared/types'
+import type { AppSettings, HistoryEntry } from '../shared/settings'
 
 export interface FreeToolApi {
   /** 拖拽的 File → 绝对路径（同步，webUtils） */
@@ -102,6 +103,12 @@ export interface FreeToolApi {
   organizePlan(p: OrganizePlanParams): Promise<ApiResult<{ plan: OrganizePair[] }>>
   organizeApply(p: OrganizeApplyParams): Promise<ApiResult<{ count: number }>>
   hashFiles(p: HashParams): Promise<ApiResult<HashResult[]>>
+  getSettings(): Promise<ApiResult<AppSettings>>
+  setSettings(patch: Partial<AppSettings>): Promise<ApiResult<AppSettings>>
+  getVersion(): Promise<ApiResult<string>>
+  getHistory(): Promise<ApiResult<HistoryEntry[]>>
+  addHistory(entry: HistoryEntry): Promise<ApiResult<HistoryEntry[]>>
+  clearHistory(): Promise<ApiResult<HistoryEntry[]>>
 }
 
 declare global {

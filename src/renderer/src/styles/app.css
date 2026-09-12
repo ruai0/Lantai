@@ -19,6 +19,12 @@
   --surface-2: #f7f9fb;
   --line: #dfe4ea;
   --line-soft: #e9edf2;
+  --grid-line: rgba(22, 32, 46, 0.032);
+  --scroll-thumb: rgba(22, 32, 46, 0.16);
+  --scroll-thumb-hover: rgba(22, 32, 46, 0.3);
+  --diff-add: #e8f5ec;
+  --diff-del: #fdecec;
+  --diff-chg: #fdf3e3;
 
   /* --- 墨色文字 --- */
   --text-1: #16202e;
@@ -108,13 +114,13 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(22, 32, 46, 0.16);
+  background: var(--scroll-thumb);
   border: 3px solid transparent;
   border-radius: 8px;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(22, 32, 46, 0.3);
+  background: var(--scroll-thumb-hover);
   background-clip: content-box;
 }
 
@@ -295,8 +301,8 @@ body {
   /* 网格纸 + 左上余烬辉光 */
   background:
     radial-gradient(560px 320px at -6% -10%, rgba(227, 96, 37, 0.07), transparent 70%),
-    repeating-linear-gradient(0deg, rgba(22, 32, 46, 0.032) 0 1px, transparent 1px 30px),
-    repeating-linear-gradient(90deg, rgba(22, 32, 46, 0.032) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 30px),
     var(--paper);
 }
 /* 路由切换时的入场（配合 App.vue 的 key） */
@@ -922,11 +928,11 @@ body {
   text-align: center;
   font-weight: 700;
 }
-.diff-line.t-add { background: #e8f5ec; }
+.diff-line.t-add { background: var(--diff-add); }
 .diff-line.t-add .sg { color: #1a7f4b; }
-.diff-line.t-del { background: #fdecec; }
+.diff-line.t-del { background: var(--diff-del); }
 .diff-line.t-del .sg { color: #c0392b; }
-.diff-line.t-chg { background: #fdf3e3; }
+.diff-line.t-chg { background: var(--diff-chg); }
 .diff-line.t-chg .sg { color: #b07a1e; }
 .diff-line.t-same .tx { color: var(--text-2); }
 
@@ -952,4 +958,40 @@ body {
   margin-left: 10px;
   color: var(--text-3);
   font-size: 12.5px;
+}
+
+/* ============================================================
+   深色主题（html[data-theme=dark]）
+   仅翻转纸面/文字/线条等令牌；侧栏本就是墨蓝，两主题通用。
+   Element Plus 变量在 :root 用 var() 引用这些令牌，同元素覆盖即级联生效。
+   ============================================================ */
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #0e1522;
+  --surface: #16202e;
+  --surface-2: #1b2738;
+  --line: #2a3a52;
+  --line-soft: #223044;
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.24);
+
+  --text-1: #e6ecf5;
+  --text-2: #9fb0c6;
+  --text-3: #6b7c95;
+
+  --accent-wash: rgba(212, 80, 26, 0.16);
+  --diff-add: rgba(67, 199, 122, 0.14);
+  --diff-del: rgba(240, 100, 100, 0.14);
+  --diff-chg: rgba(242, 167, 59, 0.16);
+
+  /* 少数直接写死浅色的 Element 变量 */
+  --el-text-color-placeholder: #5f6f88;
+  --el-fill-color-lighter: #1b2738;
+  --el-fill-color-light: var(--surface-2);
+  --el-fill-color-blank: var(--surface);
+  --el-bg-color: var(--surface);
+  --el-bg-color-overlay: var(--surface);
+  --el-disabled-bg-color: var(--surface-2);
 }

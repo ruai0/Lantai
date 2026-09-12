@@ -51,7 +51,13 @@ const api = {
   renameApply: (p: unknown) => invoke('file:rename-apply', p),
   organizePlan: (p: unknown) => invoke('file:organize-plan', p),
   organizeApply: (p: unknown) => invoke('file:organize-apply', p),
-  hashFiles: (p: unknown) => invoke('file:hash', p)
+  hashFiles: (p: unknown) => invoke('file:hash', p),
+  getSettings: () => invoke('settings:get'),
+  setSettings: (patch: unknown) => invoke('settings:set', patch),
+  getVersion: () => invoke('settings:version'),
+  getHistory: () => invoke('history:get'),
+  addHistory: (entry: unknown) => invoke('history:add', entry),
+  clearHistory: () => invoke('history:clear')
 }
 
 contextBridge.exposeInMainWorld('api', api)

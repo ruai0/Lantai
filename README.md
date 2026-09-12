@@ -17,6 +17,15 @@
 | 文件管理 | **文件清单导出 Excel**（文件名 / 类型 / 大小 / 修改时间 / 相对路径，可含子文件夹，适合送审清单）、**重复文件查找**（按内容 MD5 判断，可导出 Excel 报告，不自动删除）、**ZIP 打包 / 批量解压**（每个包解到独立文件夹，重名不覆盖） |
 | 常用小工具 | JSON 格式化/压缩、Base64 / URL 编解码（UTF-8 安全）、时间戳⇄日期、UUID 批量生成、文件哈希（MD5/SHA-1/SHA-256）、二维码生成并保存 PNG、**批量提取联系方式**（从 txt/csv/xlsx/docx 提取手机号 / 身份证号 / 邮箱，去重导出 TXT）、**批量二维码**（从 Excel/JSON 数据按行生成 PNG，可按 `{列名}` 命名文件）、**识别二维码**（从图片还原内容，是链接可一键打开）、**名单加拼音**（Excel/JSON 姓名列批量生成拼音，可选声调样式与首字母，导出 CSV）、**文本对比**（两版文字逐行比对，新增/删除/变更/未变四色统一视图，支持从文件载入含 GBK 自动识别） |
 
+## 设置
+
+侧栏「系统 › 设置」，偏好存 `userData/settings.json`，全应用共享：
+
+- **默认输出文件夹**：设置一次，各功能输出框自动预填（仍可临时改）。
+- **任务完成后**：仅提示 / 打开所在文件夹 / 打开输出文件，统一所有导出类操作的行为。
+- **外观**：浅色 / 深色 / 跟随系统；深色只翻转纸面/文字/线条令牌，墨蓝侧栏与琥珀信号色两主题通用。
+- **使用历史**：每次产出任务自动记录（功能、时间、输出路径），点击直达；最多 100 条，可清空。
+
 ## 界面设计
 
 v0.5 起采用「**精密仪器面板**」设计语言：墨蓝操作台侧栏 + 琥珀信号色，替代 Element Plus 默认蓝。
@@ -42,7 +51,7 @@ npm run dev      # 开发模式（热更新）
 npm run build    # 构建到 out/
 npm run typecheck
 npm run test     # vitest 单测 + 临时目录集成冒烟测试
-npm run test:ui  # 一键 UI 冒烟：自动构建测试包→起 CDP→跑 8 组真实界面场景→关（约 10 秒）
+npm run test:ui  # 一键 UI 冒烟：自动构建测试包→起 CDP→跑 9 组真实界面场景→关（约 10 秒）
 npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
 ```
 
@@ -52,13 +61,13 @@ npm run dist     # 打包 Windows NSIS 安装包 + 便携版到 release/
 
 1. `FT_TEST_HOOKS=1 npm run build` 构建带组件实例钩子的测试包（正式构建不带，产物无此钩子）
 2. `node_modules/electron/dist/electron.exe . --remote-debugging-port=9222` 启动
-3. `node scripts/cdp.mjs .ftest/ui-organize.js`（或 ui-pdf3 / ui-image / ui-tools / ui-filekit / ui-match / ui-diff）逐个流程验证；测试素材用 `node scripts/make-fixtures.mjs` 生成
+3. `node scripts/cdp.mjs .ftest/ui-organize.js`（或 ui-drag / ui-pdf3 / ui-image / ui-tools / ui-filekit / ui-match / ui-diff / ui-settings）逐个流程验证；测试素材用 `node scripts/make-fixtures.mjs` 生成
 
 ## 架构
 
 ```
 src/
-├─ shared/             types.ts 三端共享类型（IPC 统一返回 { ok, data | error }）；namePattern.ts 文件名共用工具；textDiff.ts 文本逐行差异（前后缀剥离 + LCS + 删增配对）
+├─ shared/             types.ts 三端共享类型（IPC 统一返回 { ok, data | error }）；namePattern.ts 文件名共用工具；textDiff.ts 文本逐行差异（前后缀剥离 + LCS + 删增配对）；settings.ts 偏好与历史类型 + 默认值/归一化
 ├─ main/               主进程：ipc/ 薄注册层 + services/ 业务
 │   ├─ pdfService          pdf-lib（水印中文用系统字体 simhei/deng 等经 fontkit 嵌入）
 │   ├─ excelToolsService   exceljs + iconv-lite（GBK）：合并/拆分/脱敏/CSV
@@ -76,7 +85,7 @@ src/
 
 - IPC 通道按工具分组（`pdf:merge`、`excel:mask`、`excel:match-fill`、`excel:compare`、`office:to-pdf`、`file:find-duplicates`、`zip:pack`、`text:extract`…），业务异常在 main 统一包装为 `{ ok:false, error }`。
 - 输出文件重名自动追加 `(2)`，绝不覆盖。
-- 测试：vitest 覆盖 main 内纯函数（页码解析、重命名计划、脱敏、CSV 解析、重复分组、联系方式提取、Word XML 替换、关联键归一、文本差异）+ 临时目录集成冒烟（真实 xlsx/PDF/zip 读写往返，含匹配填充、差异比对、页面整理、图片重建 PDF）；`npm run test:ui` 用 CDP 驱动真实界面跑 8 组端到端场景。
+- 测试：vitest 覆盖 main 内纯函数（页码解析、重命名计划、脱敏、CSV 解析、重复分组、联系方式提取、Word XML 替换、关联键归一、文本差异）+ 临时目录集成冒烟（真实 xlsx/PDF/zip 读写往返，含匹配填充、差异比对、页面整理、图片重建 PDF）；`npm run test:ui` 用 CDP 驱动真实界面跑 9 组端到端场景。
 
 ## 已知限制（v0.5）
 

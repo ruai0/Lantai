@@ -7,3 +7,4 @@ dist/
 .ftest/out/
 .ftest/ui-smoke-last.json
 .ftest/ui-smoke-app.log
+.ftest/ui-smoke-ready.json

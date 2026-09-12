@@ -37,10 +37,10 @@
   res.favRestored = await __Z.wait(() => home.pinned.length === 0, 5000)
 
   // ── 3) 诊断信息：IPC 有数据 + 点击按钮有 UI 反馈 ─────────────────────
-  if (!(await __Z.nav('#/settings', 'version'))) return { fail: 'SettingsView 未挂载' }
+  if (!(await __Z.nav('#/settings', 'loadProbe'))) return { fail: 'SettingsView 未挂载' }
   const diag = await window.api.diagnostics()
   res.diagOk = !!(diag.ok && diag.data.version && diag.data.platform && diag.data.userData)
-  const st = __Z.vm('version')
+  const st = __Z.vm('loadProbe')
   await st.copyDiagnostics()
   res.diagMsgShown = await __Z.wait(
     () => [...document.querySelectorAll('.el-message')].some(m => /诊断信息|复制失败/.test(m.textContent)),

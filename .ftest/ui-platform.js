@@ -58,9 +58,40 @@
   res.updateStateOk = !!(us.ok && typeof us.data.current === 'string')
   const uc = await window.api.updateCheck()
   res.updateCheckOk = !!uc.ok // 开发环境返回 idle+提示，不算错误
-  if (!(await __Z.nav('#/settings', 'version'))) return { fail: 'SettingsView 未挂载' }
+  if (!(await __Z.nav('#/settings', 'loadProbe'))) return { fail: 'SettingsView 未挂载' }
   await new Promise(r => setTimeout(r, 300))
   res.updateCardShown = document.body.textContent.includes('软件更新')
+
+
+  // ── 作者署名 / 关闭行为设置 / 调试口令 / 首启指引 ───────────────────
+  if (!(await __Z.nav('#/', 'pinned'))) return { ...res, fail: 'HomeView 未挂载' }
+  res.authorShown = document.body.textContent.includes('ruai0')
+  for (const ch of 'xiaoruai') window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }))
+  res.debugOpened = await __Z.wait(() => !!document.querySelector('.dbg-overlay'), 3000)
+  const di = await window.api.devInfo()
+  res.devInfoOk = !!(di.ok && di.data.settingsRaw && typeof di.data.logTail === 'string')
+  if (res.debugOpened) {
+    const tabs = [...document.querySelectorAll('.dbg-tabs button')]
+    tabs.find(b => b.textContent.includes('操作'))?.click()
+    res.debugOpsTab = await __Z.wait(() => document.querySelectorAll('.dbg-op').length >= 4, 3000)
+    document.querySelector('.dbg-close')?.click()
+    res.debugClosed = await __Z.wait(() => !document.querySelector('.dbg-overlay'), 3000)
+  }
+  const dg2 = await window.api.diagnostics()
+  res.diagHasFeed = !!(dg2.ok && 'updateFeed' in dg2.data)
+  if (!(await __Z.nav('#/settings', 'loadProbe'))) return { ...res, fail: 'SettingsView 未挂载' }
+  await new Promise(r => setTimeout(r, 200))
+  res.closeModeShown = document.body.textContent.includes('点右上角关闭按钮时')
+
+  // 首启指引：翻转 onboarded → 弹层出现 → 跳过 → 持久化 true
+  const appVm = __Z.vm('settings')
+  if (!appVm) return { ...res, fail: 'App settings 未暴露' }
+  appVm.settings.onboarded = false
+  res.welcomeShown = await __Z.wait(() => !!document.querySelector('.wc-mask'), 3000)
+  document.querySelector('.wc-skip')?.click()
+  res.welcomeGone = await __Z.wait(() => !document.querySelector('.wc-mask'), 3000)
+  const sAfter = await window.api.getSettings()
+  res.welcomePersisted = !!(sAfter.ok && sAfter.data.onboarded === true)
 
   return res
 })()

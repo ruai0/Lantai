@@ -42,6 +42,7 @@ function toast(title: string, body: string): void {
 /** 托盘菜单入口：检查结果以 toast 反馈 */
 export function trayCheckForUpdates(): void {
   if (!app.isPackaged) return toast('兰台', '开发环境不检查更新')
+  if (process.platform !== 'win32') return toast('兰台 · 更新', LINUX_UPDATE_HINT)
   if (!applyFeed()) return toast('兰台 · 更新', '更新源被禁用（设置为 off）或地址无效')
   toastOnResult = true
   void autoUpdater.checkForUpdates().catch(() => {})
@@ -79,8 +80,12 @@ function applyFeed(): boolean {
   return true
 }
 
+/** Linux/麒麟 测试版：暂不支持应用内自动更新，提示手动下载（deb/AppImage 更新链路复杂，正式版再补） */
+const LINUX_UPDATE_HINT = '麒麟测试版暂不支持应用内自动更新，请到 GitHub Releases 手动下载新版'
+
 export function initAutoUpdater(): void {
   if (!app.isPackaged) return // 开发环境不碰更新
+  if (process.platform !== 'win32') return // 仅 Windows 走 NSIS 自动更新
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   // v6 起签名校验是函数（返回错误串，null=通过）；本项目未做代码签名，恒通过——
@@ -122,6 +127,7 @@ export function initAutoUpdater(): void {
 
 handle('update:check', async () => {
   if (!app.isPackaged) return { ...state, error: state.error ?? '开发环境不检查更新' }
+  if (process.platform !== 'win32') return { ...state, error: LINUX_UPDATE_HINT }
   if (!applyFeed()) return { ...state, phase: 'error' as const, error: '更新源地址无效' }
   try {
     await autoUpdater.checkForUpdates()

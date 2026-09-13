@@ -5,6 +5,8 @@ import { plain } from '../shared/serialize'
 const invoke = (channel: string, ...args: unknown[]): Promise<unknown> =>
   ipcRenderer.invoke(channel, ...args.map(a => plain(a)))
 const api = {
+  /** 运行平台（win32 / linux / darwin），渲染层据此显示「麒麟测试版」等标识 */
+  platform: process.platform,
   /** 拖拽进来的 File → 真实路径（Electron 32+ 移除了 File.path，必须走 webUtils） */
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   pickFiles: (p?: unknown) => invoke('dialog:pick-files', p),
@@ -89,6 +91,10 @@ const api = {
   updateCheck: () => invoke('update:check'),
   updateInstall: () => invoke('update:install'),
   updateState: () => invoke('update:state'),
+  /** 单位授权（LICENSE_ENFORCE 关闭时 status 里 enforce=false，UI 自行隐藏） */
+  licenseStatus: () => invoke('license:status'),
+  licenseActivate: (code: string) => invoke('license:activate', code),
+  licenseDeactivate: () => invoke('license:deactivate'),
   /** 订阅更新状态推送；返回取消订阅函数 */
   onUpdateState: (cb: (state: unknown) => void): (() => void) => {
     const listener = (_e: unknown, s: unknown): void => cb(s)

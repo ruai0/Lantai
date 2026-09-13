@@ -105,6 +105,7 @@ describe('PDF 页面整理 / 重建', () => {
     const doc = await PDFDocument.create()
     for (let i = 0; i < pages; i++) doc.addPage([300, 200])
     const p = path.join(tmp, name)
+    if (!p.startsWith(tmp + path.sep)) throw new Error('fixture 路径越界')
     await fs.promises.writeFile(p, await doc.save())
     return p
   }

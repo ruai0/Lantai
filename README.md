@@ -6,7 +6,7 @@
   <p>
     <a href="https://github.com/ruai0/Lantai/releases/latest"><img src="https://img.shields.io/github/v/release/ruai0/Lantai?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=F2A73B" alt="release"/></a>
     <a href="https://github.com/ruai0/Lantai/releases"><img src="https://img.shields.io/github/downloads/ruai0/Lantai/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F" alt="downloads"/></a>
-    <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%2B%20x64-1b2a41" alt="platform"/>
+    <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Win10%2B%20%C2%B7%20%E9%BA%92%E9%BA%9F%2FLinux-1b2a41" alt="platform"/>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E4%B8%AA%E4%BA%BA%E5%85%8D%E8%B4%B9%C2%B7%E5%8D%95%E4%BD%8D%E6%8E%88%E6%9D%83-2f855a" alt="license"/></a>
   </p>
 </div>
@@ -46,16 +46,21 @@
 
 | 文件 | 用途 |
 |---|---|
-| `lantai-setup-x.y.z.exe` | **安装版（推荐）**：安装向导 + 桌面快捷方式 + 自动更新 |
-| `lantai-portable-x.y.z.exe` | **便携版**：双击即用，免安装，不参与自动更新 |
-| `SHA256SUMS.txt` | 校验包完整性：`certutil -hashfile 文件 SHA256` 比对 |
+| `lantai-setup-x.y.z.exe` | **Windows 安装版（推荐）**：安装向导 + 桌面快捷方式 + 自动更新 |
+| `lantai-portable-x.y.z.exe` | **Windows 便携版**：双击即用，免安装，不参与自动更新 |
+| `lantai-x.y.z-linux-x64.deb` | **麒麟 / Linux 测试版（x64）**：兆芯 / 海光等 x86_64 机器，`sudo dpkg -i` 安装 |
+| `lantai-x.y.z-linux-arm64.deb` | **麒麟 / Linux 测试版（arm64）**：飞腾 / 鲲鹏等 ARM64 机器（银河麒麟 V10 常见） |
+| `lantai-x.y.z-linux-*.AppImage` | **麒麟 / Linux 测试版**：免安装单文件，`chmod +x` 后直接运行 |
+| `SHA256SUMS.txt` / `SHA256SUMS-linux.txt` | 校验包完整性：Windows `certutil -hashfile 文件 SHA256`，Linux `sha256sum -c` |
 
-> **系统要求**：Windows 10 及以上、x64（Electron 44 不支持 Win7/8）。
+> **系统要求**：Windows 版需 Win10 及以上、x64（Electron 44 不支持 Win7/8）；麒麟 / Linux 版为**测试版**，支持 x64 与 arm64，Office 转 PDF 依赖系统安装的 LibreOffice（未装会明确提示）。
 > **首次运行提示**：安装包未做代码签名，Windows SmartScreen 可能蓝屏拦截——点「更多信息 → 仍要运行」即可；这是所有未签名小工具的正常现象，与软件安全无关。
 
 ## 自动更新
 
-开箱即用：应用默认从本仓库 Releases 检查更新，发现新版自动下载，右下角提示「重启安装」。上不了外网的机器可在「设置 → 软件更新」填内网镜像目录地址，或填 `off` 彻底禁用——禁用后应用不发起任何网络请求。
+开箱即用：Windows 版默认从本仓库 Releases 检查更新，发现新版自动下载，右下角提示「重启安装」。上不了外网的机器可在「设置 → 软件更新」填内网镜像目录地址，或填 `off` 彻底禁用——禁用后应用不发起任何网络请求。
+
+> 麒麟 / Linux 测试版暂不支持应用内自动更新，请从 Releases 手动下载新版 `.deb` / AppImage 覆盖安装。
 
 ## 设置一览
 
@@ -69,7 +74,7 @@
 
 ## 已知限制（v0.6）
 
-- 加密 PDF 不支持（提示先解密）；Office 转 PDF 需要本机装有 MS Office 或 WPS。
+- 加密 PDF 不支持（提示先解密）；Office 转 PDF 需要本机装有 MS Office 或 WPS（Windows）/ LibreOffice（麒麟 / Linux 测试版）。
 - PDF 压缩是整页栅格化重建：文字型 PDF 转图片后文字不可复制，故提供多档分辨率。
 - Excel 合并/拆分保留单元格值，不保留公式与样式；比对/脱敏取第一个工作表；不支持旧 .xls（Office 转 PDF 支持）。
 - Word 替换在文本节点内生效，被排版拆开的词可能匹配不到；页眉页脚同。

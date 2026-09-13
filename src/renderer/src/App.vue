@@ -19,6 +19,8 @@ const router = useRouter()
 const active = computed(() => route.path)
 
 const appVersion = ref('')
+/** 麒麟/Linux 为测试版发行，侧栏底部加标识；Windows 正式版不显示 */
+const isLinux = api.platform === 'linux'
 onMounted(() => {
   void api.getVersion().then(r => {
     if (r.ok) appVersion.value = r.data
@@ -141,6 +143,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 
       <div class="rail-status">
         <span class="rail-ver">兰台 v{{ appVersion }} · by ruai0</span>
+        <span v-if="isLinux" class="rail-beta" title="麒麟/Linux 版本为测试版，功能与稳定性持续完善中">麒麟测试版</span>
       </div>
     </el-aside>
     <el-main class="app-main">

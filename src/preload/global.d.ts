@@ -64,8 +64,11 @@ import type {
   UpdateState
 } from '../shared/types'
 import type { AppSettings, HistoryEntry } from '../shared/settings'
+import type { LicenseStatus } from '../shared/license'
 
 export interface LantaiApi {
+  /** 运行平台：win32 / linux / darwin */
+  platform: string
   /** 拖拽的 File → 绝对路径（同步，webUtils） */
   getPathForFile(file: File): string
   pickFiles(p?: PickFilesParams): Promise<ApiResult<string[]>>
@@ -147,6 +150,10 @@ export interface LantaiApi {
   updateCheck(): Promise<ApiResult<UpdateState>>
   updateInstall(): Promise<ApiResult<boolean>>
   updateState(): Promise<ApiResult<UpdateState>>
+  /** 单位授权：查询状态 / 注册授权码 / 解除授权 */
+  licenseStatus(): Promise<ApiResult<LicenseStatus>>
+  licenseActivate(code: string): Promise<ApiResult<LicenseStatus>>
+  licenseDeactivate(): Promise<ApiResult<LicenseStatus>>
   /** 订阅更新状态推送；返回取消订阅函数 */
   onUpdateState(cb: (state: UpdateState) => void): () => void
 }

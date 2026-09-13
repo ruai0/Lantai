@@ -46,6 +46,7 @@ async function makePdf(name: string, pages: number): Promise<string> {
   const doc = await PDFDocument.create()
   for (let i = 0; i < pages; i++) doc.addPage([400, 300])
   const p = path.join(tmp, name)
+  if (!p.startsWith(tmp + path.sep)) throw new Error('fixture 路径越界')
   await fs.promises.writeFile(p, await doc.save())
   return p
 }

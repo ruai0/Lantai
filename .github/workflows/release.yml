@@ -55,6 +55,7 @@ jobs:
             for ($j = $si + 1; $j -lt $all.Count; $j++) { if ($all[$j] -match '^## \[') { $ei = $j; break } }
             ($all[($si + 1)..($ei - 1)] -join "`n") | Set-Content release-notes.md -Encoding utf8
           }
+          "`n---`n本版本同时提供 **麒麟 / Linux 测试版**（.deb / AppImage，x64 + arm64），见下方 Assets 中的 `*-linux-*` 文件；麒麟版为测试版，Office 转 PDF 依赖系统 LibreOffice，功能与稳定性持续完善中。Windows 版为正式版。" | Add-Content release-notes.md -Encoding utf8
           Get-Content release-notes.md
 
       - name: 创建 Release 并上传产物
@@ -65,3 +66,41 @@ jobs:
           release/*.exe release/*.blockmap release/latest.yml release/SHA256SUMS.txt
           --title "兰台 ${{ github.ref_name }}"
           --notes-file release-notes.md
+
+  build-linux:
+    # 麒麟 / Linux 测试版：deb + AppImage，x64 + arm64（飞腾/鲲鹏 + 兆芯/海光）。
+    # 依赖 Windows job 先建好 Release，这里只追加上传。
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建主进程 / 渲染层
+        run: |
+          node scripts/check-renderer.mjs
+          npx electron-vite build
+
+      - name: 打包 deb + AppImage（x64 / arm64）
+        run: npx electron-builder --linux --x64 --arm64
+
+      - name: 生成 Linux 校验和
+        run: |
+          cd release && sha256sum lantai-*linux*.deb lantai-*linux*.AppImage > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt
+
+      - name: 上传到已创建的 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            release/lantai-*linux*.deb \
+            release/lantai-*linux*.AppImage \
+            release/SHA256SUMS-linux.txt \
+            --clobber

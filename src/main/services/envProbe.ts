@@ -1,20 +1,16 @@
 import { spawn } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
 import type { EnvProbe } from '@shared/types'
+import { listCjkFontNames } from './cjkFont'
+import { resolveSoffice } from './officeToPdfService'
 
 /**
  * 本机环境探测（#2 诊断增强）：
- * - Office/WPS：查注册表 HKCR 的 COM ProgID（比 New-Object 实例化快几个数量级，
- *   ProgID 注册 ≈ 组件可用；真正的可用性最终以一次实际转换为准）。
- * - 中文字体：与 pdfService 的水印字体优先级同一张清单，扫描 %SystemRoot%\Fonts。
+ * - Windows：查注册表 HKCR 的 COM ProgID + 扫 %SystemRoot%\Fonts。
+ * - Linux/麒麟：探测 soffice（LibreOffice）可执行 + 递归扫中文字体目录。
  * 结果进程内缓存，装机验收/远程报障时一次探测长期复用。
  */
 
 export type { EnvProbe }
-
-/** 与 pdfService.CJK_FONTS 保持一致 */
-const CJK_FONTS = ['simhei.ttf', 'deng.ttf', 'simfang.ttf', 'simkai.ttf', 'STZHONGS.TTF']
 
 /** ProgID 存在还不够——WPS 常把 Word.Application 这类 MS ProgID 也注册走；
  *  所以额外读 ProgID 键的默认值（实现描述，如 "Microsoft Word 2016" / "WPS Office …"）判定真实归属 */
@@ -60,8 +56,23 @@ function detectOffice(): Promise<Map<string, string | null>> {
 }
 
 function detectFonts(): string[] {
-  const dir = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'Fonts')
-  return CJK_FONTS.filter(name => fs.existsSync(path.join(dir, name)))
+  return listCjkFontNames()
+}
+
+/** Linux/麒麟：LibreOffice 一套通吃 word/excel/ppt，探到即三类都可用 */
+async function probeLinux(): Promise<EnvProbe> {
+  const soffice = await resolveSoffice()
+  const label = soffice ? 'LibreOffice' : '未检测到（需安装 libreoffice）'
+  const probe: EnvProbe = {
+    word: label,
+    excel: label,
+    ppt: label,
+    cjkFonts: detectFonts(),
+    watermarkReady: false,
+    probedAt: Date.now()
+  }
+  probe.watermarkReady = probe.cjkFonts.length > 0
+  return probe
 }
 
 /** 判定单个 ProgID 的真实归属：描述含 WPS 或 K 开头 id → WPS；否则 MS */
@@ -74,6 +85,10 @@ function brandOf(cand: { id: string; ms: string; wps: string }, desc: string | n
 /** force=true 时忽略缓存重新探测（设置页「重新探测」按钮） */
 export async function probeEnv(force = false): Promise<EnvProbe> {
   if (cached && !force) return cached
+  if (process.platform !== 'win32') {
+    cached = await probeLinux()
+    return cached
+  }
   const detected = await detectOffice()
   const label = (kind: 'word' | 'excel' | 'ppt'): string => {
     const brands: string[] = []

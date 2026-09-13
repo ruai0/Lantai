@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,6 +7,26 @@ import { stemOf, uniquePath } from './fileUtils'
 import { TaskCancelledError } from './taskProgress'
 
 const SUPPORTED = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+
+/** Linux/麒麟 下 LibreOffice 可执行文件的常见位置（deb、snap、flatpak 兜底） */
+const SOFFICE_CANDIDATES = ['/usr/bin/soffice', '/usr/bin/libreoffice', '/snap/bin/libreoffice', '/usr/lib/libreoffice/program/soffice', '/var/lib/flatpak/exports/bin/org.libreoffice.LibreOffice']
+
+/** 探测可用的 soffice/libreoffice；返回可执行路径或 null。注入 deps 便于单测 */
+export function resolveSoffice(deps?: { exists?: (p: string) => boolean; which?: (bin: string) => string | null }): string | null {
+  const exists = deps?.exists ?? (p => { try { return fs.existsSync(p) } catch { return false } })
+  for (const c of SOFFICE_CANDIDATES) if (exists(c)) return c
+  const which = deps?.which ?? ((bin: string) => { try { return spawnSync('which', [bin], { encoding: 'utf8' }).stdout?.trim() || null } catch { return null } })
+  for (const bin of ['soffice', 'libreoffice']) {
+    const found = which(bin)
+    if (found) return found
+  }
+  return null
+}
+
+/** soffice 转换命令参数（纯函数，便于单测）：无头、转 PDF、输出到指定目录、单文件 */
+export function buildSofficeArgs(src: string, outDir: string): string[] {
+  return ['--headless', '--norestore', '--convert-to', 'pdf', '--outdir', outDir, src]
+}
 
 /** PowerShell 单引号字符串转义 */
 function psStr(s: string): string {
@@ -71,7 +91,8 @@ foreach ($app in $cache.Values) { try { $app.Quit() } catch {} }
 `
 }
 
-export async function officeToPdf(
+/** Windows：PowerShell + Office/WPS COM 批量转换（缓存应用实例，逐行推进度） */
+async function officeToPdfWin(
   params: OfficeToPdfParams,
   onProgress?: (done: number, total: number) => void,
   isCancelled?: () => boolean
@@ -149,4 +170,88 @@ export async function officeToPdf(
     throw new Error('没有产生任何转换结果，请确认本机已安装 Office 或 WPS')
   }
   return { outputs, failed }
+}
+
+/** 单文件 soffice 转换，resolve 退出码；用户取消则 reject(TaskCancelledError) */
+function convertOne(soffice: string, src: string, tmpDir: string, isCancelled?: () => boolean): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(soffice, buildSofficeArgs(src, tmpDir), { env: { ...process.env, HOME: process.env.HOME ?? os.homedir() } })
+    let killed = false
+    const poll = setInterval(() => {
+      if (isCancelled?.()) {
+        killed = true
+        child.kill('SIGKILL')
+      }
+    }, 400)
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+    }, 5 * 60 * 1000)
+    child.on('error', e => {
+      clearInterval(poll)
+      clearTimeout(timer)
+      reject(new Error(`无法启动 LibreOffice：${e.message}`))
+    })
+    child.on('exit', code => {
+      clearInterval(poll)
+      clearTimeout(timer)
+      if (killed) reject(new TaskCancelledError())
+      else resolve(code ?? -1)
+    })
+  })
+}
+
+/** Linux/麒麟：LibreOffice 无头逐文件转换（正确性优先，批量偏慢为已知限制） */
+async function officeToPdfLinux(
+  params: OfficeToPdfParams,
+  onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean
+): Promise<OfficeToPdfResult> {
+  const soffice = resolveSoffice()
+  if (!soffice) throw new Error('未检测到 LibreOffice：麒麟/Linux 下 Office 转 PDF 依赖它，请先安装 libreoffice')
+  const outputs: string[] = []
+  const failed: OfficeToPdfResult['failed'] = []
+  const total = params.paths.length
+  for (let i = 0; i < total; i++) {
+    if (isCancelled?.()) throw new TaskCancelledError()
+    const src = params.paths[i]
+    const out = uniquePath(params.outDir, `${stemOf(src)}.pdf`)
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lantai_o2p_'))
+    try {
+      const code = await convertOne(soffice, src, tmpDir, isCancelled)
+      const produced = path.join(tmpDir, `${stemOf(src)}.pdf`)
+      if (code === 0 && fs.existsSync(produced)) {
+        try {
+          fs.renameSync(produced, out)
+        } catch {
+          fs.copyFileSync(produced, out)
+          fs.rmSync(produced, { force: true })
+        }
+        outputs.push(out)
+      } else {
+        failed.push({ name: path.basename(src), reason: `LibreOffice 转换失败（退出码 ${code}）` })
+      }
+    } catch (e) {
+      if (e instanceof TaskCancelledError) throw e
+      failed.push({ name: path.basename(src), reason: e instanceof Error ? e.message : String(e) })
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+    onProgress?.(i + 1, total)
+  }
+  if (outputs.length === 0 && failed.length === 0) throw new Error('没有产生任何转换结果')
+  return { outputs, failed }
+}
+
+/** 平台分发：Windows 走 COM，其余走 LibreOffice */
+export async function officeToPdf(
+  params: OfficeToPdfParams,
+  onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean
+): Promise<OfficeToPdfResult> {
+  if (params.paths.length === 0) throw new Error('请先选择要转换的文件')
+  const bad = params.paths.filter(p => !SUPPORTED.includes(path.extname(p).toLowerCase()))
+  if (bad.length) {
+    throw new Error(`仅支持 Word/Excel/PPT 文件（不支持：${bad.map(b => path.basename(b)).join('、')}）`)
+  }
+  return process.platform === 'win32' ? officeToPdfWin(params, onProgress, isCancelled) : officeToPdfLinux(params, onProgress, isCancelled)
 }

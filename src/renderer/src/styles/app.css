@@ -267,6 +267,15 @@ body {
   font-size: 10.5px;
   color: #55667d;
 }
+.rail-beta {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--amber);
+  background: var(--accent-wash);
+  border: 1px solid rgba(242, 167, 59, 0.35);
+}
 
 .app-main {
   padding: 22px 28px 40px;

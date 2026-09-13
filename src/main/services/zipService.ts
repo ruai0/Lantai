@@ -58,15 +58,23 @@ export async function unpackZip(params: ZipUnpackParams): Promise<ZipUnpackResul
     }
     const dest = uniquePath(params.outDir, `${path.basename(p, path.extname(p))}`)
     fs.mkdirSync(dest, { recursive: true })
+    const destAbs = path.resolve(dest)
     let count = 0
     for (const name of Object.keys(zip.files)) {
       const entry = zip.files[name]
-      const safe = name.replace(/\.\./g, '_')
+      // Zip Slip 防护：统一分隔符、逐段剔除 . 与 ..、丢弃绝对路径前缀，再解析并强制约束在 dest 内
+      const rel = name
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter(seg => seg && seg !== '.' && seg !== '..')
+        .join('/')
+      if (!rel) continue
+      const target = path.resolve(destAbs, rel)
+      if (target !== destAbs && !target.startsWith(destAbs + path.sep)) continue
       if (entry.dir || name.endsWith('/')) {
-        fs.mkdirSync(path.join(dest, safe), { recursive: true })
+        fs.mkdirSync(target, { recursive: true })
         continue
       }
-      const target = path.join(dest, safe)
       fs.mkdirSync(path.dirname(target), { recursive: true })
       fs.writeFileSync(target, entry.asNodeBuffer())
       count++

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
+import { findCjkFont } from './cjkFont'
 import type {
   PdfDeletePagesParams,
   PdfImagesParams,
@@ -172,16 +173,15 @@ export async function imagesToPdf(params: PdfImagesParams): Promise<PdfResult> {
 
 /* ---------- 文字水印 ---------- */
 
-/** 系统里可用的中文字体（按优先级）；全部缺失时回退西文字体（仅支持英文水印） */
-const CJK_FONTS = ['simhei.ttf', 'deng.ttf', 'simfang.ttf', 'simkai.ttf', 'STZHONGS.TTF']
-
+/** 系统里可用的中文字体（按优先级）；全部缺失时回退西文字体（仅支持英文水印）。跨平台定位见 cjkFont.ts */
 function loadCjkFont(): Buffer | null {
-  const dir = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'Fonts')
-  for (const name of CJK_FONTS) {
-    const p = path.join(dir, name)
-    if (fs.existsSync(p)) return fs.readFileSync(p)
+  const p = findCjkFont()
+  if (!p) return null
+  try {
+    return fs.readFileSync(p)
+  } catch {
+    return null
   }
-  return null
 }
 
 const WATERMARK_COLORS: Record<WatermarkColor, ReturnType<typeof rgb>> = {
@@ -197,7 +197,7 @@ export async function watermarkPdf(params: PdfWatermarkParams): Promise<PdfResul
   let font
   if (/[\u4e00-\u9fff]/.test(text)) {
     const fontBytes = loadCjkFont()
-    if (!fontBytes) throw new Error('系统中未找到中文字体（simhei 等），中文水印不可用')
+    if (!fontBytes) throw new Error('系统中未找到可用中文字体（Windows 需 simhei 等；Linux/麒麟 需 Noto/文泉驿等），中文水印不可用')
     doc.registerFontkit(fontkit)
     font = await doc.embedFont(fontBytes, { subset: true })
   } else {

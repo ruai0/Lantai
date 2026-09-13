@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, shell, Tray } from 'electron'
 import path from 'node:path'
 import './ipc'
 import { installCrashLogging, logMain } from './services/log'
@@ -43,6 +43,18 @@ function createTray(): void {
       Menu.buildFromTemplate([
         { label: '显示主窗口', click: () => focusMainWindow() },
         { label: '检查更新', click: () => trayCheckForUpdates() },
+        {
+          label: '反馈 / 授权：复制联系邮箱',
+          click: () => {
+            clipboard.writeText('1393930984@qq.com')
+            if (process.platform === 'win32') {
+              tray?.displayBalloon({
+                title: '兰台 · 反馈与单位授权',
+                content: '已复制 1393930984@qq.com，可用任意邮箱发送问题描述或授权洽谈'
+              })
+            }
+          }
+        },
         { type: 'separator' },
         { label: '退出 兰台', click: quitApp }
       ])

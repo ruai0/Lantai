@@ -9,11 +9,56 @@ import { clearHistory, history, settings, updateSettings } from '../utils/settin
 import { checkUpdate, installUpdate, syncUpdateState, updateState } from '../utils/update'
 import type { EnvProbe } from '@shared/types'
 import type { OnClose, OnComplete, Theme } from '@shared/settings'
+import type { LicenseStatus } from '@shared/license'
 
 const version = ref('')
 const loadingDir = ref(false)
 const probe = ref<EnvProbe | null>(null)
 const probing = ref(false)
+
+/* ---------- 单位授权（LICENSE_ENFORCE 关闭时不渲染任何 UI） ---------- */
+
+const license = ref<LicenseStatus>({ enforce: false, state: 'unlicensed' })
+const licenseInput = ref('')
+const licBusy = ref(false)
+
+async function loadLicense() {
+  const r = await api.licenseStatus()
+  if (r.ok) license.value = r.data
+}
+
+async function activateLicense() {
+  const code = licenseInput.value.trim()
+  if (!code) {
+    ElMessage.warning('请先粘贴授权码')
+    return
+  }
+  licBusy.value = true
+  try {
+    const r = await api.licenseActivate(code)
+    if (r.ok) {
+      license.value = r.data
+      licenseInput.value = ''
+      ElMessage.success(`已为「${r.data.org}」注册授权`)
+    } else {
+      ElMessage.error(`注册失败：${r.error}`)
+    }
+  } finally {
+    licBusy.value = false
+  }
+}
+
+async function deactivateLicense() {
+  const r = await api.licenseDeactivate()
+  if (r.ok) {
+    license.value = r.data
+    ElMessage.info('已解除本机授权')
+  }
+}
+
+function fmtDate(sec?: number): string {
+  return sec ? new Date(sec * 1000).toLocaleDateString('zh-CN') : '—'
+}
 
 async function loadProbe(force = false) {
   probing.value = true
@@ -37,6 +82,7 @@ onMounted(async () => {
   feedInput.value = settings.value.updateFeed
   void loadProbe()
   void syncUpdateState()
+  void loadLicense()
 })
 
 async function saveFeed() {
@@ -116,6 +162,16 @@ async function toggleAutoStart(v: boolean | string | number) {
 
 function openRepo() {
   void api.openExternal('https://github.com/ruai0/Lantai')
+}
+
+async function copyContact() {
+  // 政企内网机常没配邮件客户端，mailto 点了没反应；复制邮箱最稳，兜底再把地址显示出来
+  try {
+    await navigator.clipboard.writeText('1393930984@qq.com')
+    ElMessage.success('反馈邮箱已复制：1393930984@qq.com')
+  } catch {
+    ElMessage.info('反馈与授权联系：1393930984@qq.com')
+  }
 }
 
 function openReleaseNotes() {
@@ -276,14 +332,52 @@ function fmtTime(t: number): string {
       </details>
     </StepCard>
 
+    <StepCard v-if="license.enforce" :step="7" title="单位授权">
+      <div class="lic-state">
+        <template v-if="license.state === 'valid'">
+          <el-tag type="success" size="small">已注册</el-tag>
+          <span>
+            <b>{{ license.org }}</b> ·
+            {{ license.perpetual ? '长期有效' : `有效期至 ${fmtDate(license.exp)}（剩 ${license.daysLeft} 天）` }}
+          </span>
+          <el-button link type="danger" size="small" @click="deactivateLicense">解除授权</el-button>
+        </template>
+        <template v-else-if="license.state === 'expired'">
+          <el-tag type="warning" size="small">授权已到期</el-tag>
+          <span>{{ license.org }} 的授权已于 {{ fmtDate(license.exp) }} 到期；功能仍可正常使用，已续期请粘贴新授权码</span>
+        </template>
+        <template v-else>
+          <el-tag :type="license.state === 'invalid' ? 'danger' : 'info'" size="small">
+            {{ license.state === 'invalid' ? '授权码无效' : '未注册' }}
+          </el-tag>
+          <span>{{ license.error ?? '单位使用请联系 1393930984@qq.com 获取授权码（个人免费，无需授权）' }}</span>
+        </template>
+      </div>
+      <div class="lic-input">
+        <el-input v-model="licenseInput" placeholder="粘贴授权码（v1.…）" clearable @keyup.enter="activateLicense" />
+        <el-button type="primary" :loading="licBusy" @click="activateLicense">注册</el-button>
+      </div>
+    </StepCard>
+
     <div class="about">
-      <el-icon><Setting /></el-icon>
-      <span>兰台（Lantai）v{{ version }}</span>
-      <span class="about-dot">·</span>
-      <span>© 2026 <b>ruai0</b> · 个人免费，单位使用需授权（详见 LICENSE）</span>
-      <span class="about-dot">·</span>
-      <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
-      <el-button link type="primary" size="small" style="margin-left: auto" @click="copyDiagnostics">复制诊断信息</el-button>
+      <div class="about-l">
+        <el-icon><Setting /></el-icon>
+        <span>兰台（Lantai）v{{ version }}</span>
+        <span class="about-dot">·</span>
+        <span>© 2026 <b>ruai0</b> · 个人免费，单位使用需授权（详见 LICENSE）</span>
+        <span class="about-dot">·</span>
+        <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
+        <template v-if="license.enforce">
+          <span class="about-dot">·</span>
+          <span :class="license.state === 'valid' ? 'lic-ok' : 'lic-warn'">
+            {{ license.state === 'valid' ? `已授权：${license.org}` : license.state === 'expired' ? '授权已到期' : '未注册' }}
+          </span>
+        </template>
+      </div>
+      <div class="about-r">
+        <a class="about-link" title="点击复制邮箱" @click="copyContact">反馈 · 授权：1393930984@qq.com</a>
+        <el-button link type="primary" size="small" @click="copyDiagnostics">复制诊断信息</el-button>
+      </div>
     </div>
   </div>
 </template>
@@ -373,7 +467,9 @@ function fmtTime(t: number): string {
 .about {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   margin-top: 20px;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -381,6 +477,17 @@ function fmtTime(t: number): string {
   background: var(--surface);
   color: var(--text-2);
   font-size: 12.5px;
+}
+.about-l,
+.about-r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.about-r {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .about-dot {
   color: var(--text-3);
@@ -399,5 +506,24 @@ function fmtTime(t: number): string {
 .about-link:hover {
   color: var(--amber);
   text-decoration: underline;
+}
+.lic-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.lic-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.lic-ok {
+  color: var(--amber);
+  font-weight: 600;
+}
+.lic-warn {
+  color: var(--text-3);
 }
 </style>

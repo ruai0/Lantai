@@ -32,6 +32,7 @@ async function makePdf(name: string, pages: number): Promise<string> {
     page.drawText(`p${i}`, { x: 10, y: 100, size: 12, font, color: rgb(0, 0, 0) })
   }
   const p = path.join(tmp, name)
+  if (!p.startsWith(tmp + path.sep)) throw new Error('fixture 路径越界')
   await fs.promises.writeFile(p, await doc.save())
   return p
 }

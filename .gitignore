@@ -14,3 +14,10 @@ docs/promo/
 scripts/poster/
 scripts/poster-app/
 scripts/poster.mjs
+
+# 授权码签发私钥与台账（私钥泄露 = 任何人都能签授权码，绝不入库）
+scripts/license-private.pem
+scripts/license-issued.jsonl
+
+# 插件工作目录
+.mimosa/

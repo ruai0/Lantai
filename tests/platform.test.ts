@@ -119,8 +119,10 @@ describe('taskProgress 取消语义', () => {
 
 describe('expandPaths 目录展开', () => {
   const mkTree = () => {
+    const treeRoot = path.join(ROOT, 'tree')
     for (const rel of ['a.png', 'b.jpg', '.secret.png', 'sub/c.png', 'node_modules/e.png', '.hidden/f.png']) {
-      const p = path.join(ROOT, 'tree', rel)
+      const p = path.join(treeRoot, rel)
+      if (!p.startsWith(treeRoot + path.sep)) throw new Error('fixture 路径越界')
       fs.mkdirSync(path.dirname(p), { recursive: true })
       fs.writeFileSync(p, 'x')
     }

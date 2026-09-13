@@ -61,6 +61,19 @@
     },
     "portable": {
       "artifactName": "lantai-portable-${version}.${ext}"
+    },
+    "linux": {
+      "executableName": "lantai",
+      "icon": "build/icon.png",
+      "category": "Office",
+      "maintainer": "ruai1024 <1393930984@qq.com>",
+      "vendor": "ruai1024",
+      "synopsis": "离线办公文书工具箱",
+      "target": [
+        { "target": "deb", "arch": ["x64", "arm64"] },
+        { "target": "AppImage", "arch": ["x64", "arm64"] }
+      ],
+      "artifactName": "lantai-${version}-linux-${arch}.${ext}"
     }
   },
   "dependencies": {

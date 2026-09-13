@@ -71,6 +71,7 @@ describe('replaceText 集成', () => {
       zip.file('[Content_Types].xml', '<Types/>')
       zip.file('word/document.xml', docXml)
       const p = path.join(tmp, name)
+      if (!p.startsWith(tmp + path.sep)) throw new Error('fixture 路径越界')
       fs.writeFileSync(p, zip.generate({ type: 'nodebuffer' }))
       paths.push(p)
     }

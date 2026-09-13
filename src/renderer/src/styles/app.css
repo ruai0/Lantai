@@ -256,13 +256,13 @@ body {
   padding: 10px 14px 11px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   font-size: 11px;
   color: var(--rail-text);
   letter-spacing: 0.04em;
 }
 .rail-ver {
-  margin-left: auto;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: #55667d;
@@ -331,7 +331,6 @@ body {
   font-size: 12.5px;
   line-height: 1.7;
   margin: 0 0 18px;
-  max-width: 76ch;
 }
 
 .step-card {
@@ -497,7 +496,8 @@ body {
   font-size: 13px;
   line-height: 1.75;
   color: #a9b7cc;
-  max-width: 62ch;
+  /* 两句各占一行；62ch 对中文过窄会导致句中折行 */
+  max-width: 640px;
   margin: 0;
 }
 .hero-stats {
@@ -703,6 +703,8 @@ body {
   font-size: 12px;
   line-height: 1.65;
   margin-top: 10px;
+  /* 避免末行孤字（如「报/告」被拆到下一行） */
+  text-wrap: pretty;
 }
 .tool-arrow {
   position: absolute;

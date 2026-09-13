@@ -39,11 +39,11 @@ export const TOOLS: ToolDef[] = [
   {
     path: '/image',
     name: '图片工具',
-    desc: '批量压缩、格式转换、水印、长图拼接、证件照排版',
+    desc: '批量压缩、格式转换、水印、长图拼接、证件照排版、贴图遮挡标注',
     group: '文档与 PDF',
     caption: '报送、归档、盖章',
     icon: markRaw(Picture),
-    keywords: ['压缩', '格式转换', '水印', '长图', '拼接', '证件照', '图片', '照片']
+    keywords: ['压缩', '格式转换', '水印', '长图', '拼接', '证件照', '图片', '照片', '贴图', '盖章', '马赛克', '打码', '涂黑', '遮挡', '脱敏', '裁剪', '标注']
   },
   {
     path: '/convert',
@@ -84,7 +84,7 @@ export const TOOLS: ToolDef[] = [
   {
     path: '/match',
     name: '表格匹配 / 比对',
-    desc: '跨表匹配填充替代 VLOOKUP，两版名单差异一键出报告',
+    desc: '跨表匹配填充替代 VLOOKUP，名单差异一键出报告',
     group: '表格与数据',
     caption: '台账、报表、核对',
     icon: markRaw(Connection),

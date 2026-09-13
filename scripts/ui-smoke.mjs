@@ -16,6 +16,26 @@ const SCENARIOS = [
   { file: 'ui-organize.js', name: 'PDF 页面整理', check: r => r.ok === true },
   { file: 'ui-pdf3.js', name: 'PDF 压缩/转图/提取', check: r => r.compress === 'ok' && r.toimg === 'ok' && r.text === 'ok' },
   { file: 'ui-image.js', name: '长图拼接/证件照', check: r => typeof r.stitch === 'string' && typeof r.idphoto === 'string' },
+  {
+    file: 'ui-annotate.js',
+    name: '贴图/遮挡标注',
+    check: r =>
+      r.mosaicChanged &&
+      r.undoRestored &&
+      r.coverChanged &&
+      r.coverRestored &&
+      r.stampPlaced &&
+      r.stampMerged &&
+      r.stampRestored &&
+      r.selectRect &&
+      r.clipReady &&
+      r.lossless &&
+      r.pasteStamp &&
+      r.pasteMerged &&
+      r.altWheelZoom &&
+      r.cropOk &&
+      r.saved
+  },
   { file: 'ui-tools.js', name: '二维码识别/拼音', check: r => String(r.decode?.result).includes('freetool-test') && !!r.pinyin },
   { file: 'ui-filekit.js', name: 'ZIP 打包解压', check: r => r.pack?.length > 0 && r.unpack?.length > 0 },
   { file: 'ui-match.js', name: '匹配填充/差异比对', check: r => r.fill?.matched === 3 && r.compare?.changed === 1 },

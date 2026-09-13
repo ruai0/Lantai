@@ -6,6 +6,7 @@ import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import ResultPanel from '../components/ResultPanel.vue'
+import ImageEditor from '../components/ImageEditor.vue'
 import { call } from '../utils/api'
 
 const IMG_FILTER = [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'] }]
@@ -211,7 +212,6 @@ const statusTag = (s: Item['status']) =>
 
 /* ---------- 长图拼接 ---------- */
 
-const imgTab = ref<'batch' | 'stitch' | 'idphoto'>('batch')
 const stitchFiles = ref<string[]>([])
 const stitchDir = ref<'v' | 'h'>('v')
 const stitchGap = ref(0)
@@ -285,6 +285,60 @@ async function runStitch() {
     ElMessage.success('拼接完成')
   } finally {
     stitchBusy.value = false
+  }
+}
+
+/* ---------- 贴图 / 遮挡（单张交互式标注） ---------- */
+
+const imgTab = ref<'batch' | 'stitch' | 'idphoto' | 'annotate'>('batch')
+
+const annoFile = ref<string[]>([])
+const annoImage = ref<{ name: string; mime: string; base64: string } | null>(null)
+const annoFormat = ref<'image/png' | 'image/jpeg'>('image/png')
+const annoQuality = ref(92)
+const annoBusy = ref(false)
+const annoOutput = ref('')
+const editorRef = ref<InstanceType<typeof ImageEditor> | null>(null)
+
+watch(annoFile, async () => {
+  annoOutput.value = ''
+  if (!annoFile.value.length) {
+    annoImage.value = null
+    return
+  }
+  const r = await call(api.readFiles(annoFile.value))
+  if (!r || !r.length) {
+    annoImage.value = null
+    return
+  }
+  annoImage.value = { name: r[0].name, mime: mimeOf(r[0].name), base64: r[0].base64 }
+})
+
+async function runAnnoSave() {
+  annoOutput.value = ''
+  if (!annoImage.value || !editorRef.value) {
+    ElMessage.warning('请先选择一张图片')
+    return
+  }
+  if (!outDir.value) {
+    ElMessage.warning('请选择输出文件夹')
+    return
+  }
+  annoBusy.value = true
+  try {
+    const blob = await editorRef.value.exportBlob(annoFormat.value, annoQuality.value / 100)
+    if (!blob) throw new Error('导出失败')
+    const b64 = await blobToBase64(blob)
+    const base = annoImage.value.name.replace(/\.[^.]+$/, '')
+    const ext = annoFormat.value === 'image/png' ? 'png' : 'jpg'
+    const r = await api.writeBinary({ dir: outDir.value, name: `${base}_标注.${ext}`, base64: b64 })
+    if (!r.ok) throw new Error(r.error)
+    annoOutput.value = r.data.path
+    ElMessage.success('已保存')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    annoBusy.value = false
   }
 }
 
@@ -385,12 +439,13 @@ async function runIdPhoto() {
 <template>
   <div>
     <h1 class="page-title">图片工具</h1>
-    <p class="page-desc">批量压缩 / 格式转换 / 缩放 / 水印 / 长图拼接，全部在本机完成。</p>
+    <p class="page-desc">批量压缩 / 格式转换 / 缩放 / 水印 / 长图拼接 / 贴图遮挡标注，全部在本机完成。</p>
 
     <el-tabs v-model="imgTab" style="margin-bottom: 10px">
       <el-tab-pane label="批量处理" name="batch" />
       <el-tab-pane label="长图拼接" name="stitch" />
       <el-tab-pane label="证件照排版" name="idphoto" />
+      <el-tab-pane label="贴图 / 遮挡" name="annotate" />
     </el-tabs>
 
     <template v-if="imgTab === 'batch'">
@@ -531,7 +586,7 @@ async function runIdPhoto() {
       </StepCard>
     </template>
 
-    <template v-else>
+    <template v-else-if="imgTab === 'idphoto'">
       <StepCard :step="1" title="选择证件照（一张）">
         <FilePickList
           v-model="idFile"
@@ -589,6 +644,47 @@ async function runIdPhoto() {
       <StepCard :step="4" title="执行">
         <el-button type="primary" :loading="idBusy" @click="runIdPhoto">开始排版</el-button>
         <ResultPanel :outputs="idOutput ? [idOutput] : []" />
+      </StepCard>
+    </template>
+
+    <template v-else-if="imgTab === 'annotate'">
+      <StepCard :step="1" title="选择图片（单张）">
+        <FilePickList
+          v-model="annoFile"
+          :filters="IMG_FILTER"
+          :multiple="false"
+          button-text="选择图片"
+          title="选择一张要标注的图片"
+        />
+      </StepCard>
+
+      <StepCard :step="2" title="标注编辑">
+        <ImageEditor ref="editorRef" :image="annoImage" />
+        <div class="page-desc" style="margin-top: 10px">全部在本机内存中完成，不会上传；快捷键见编辑器上方提示。</div>
+      </StepCard>
+
+      <StepCard :step="3" title="输出位置">
+        <OutDirPicker v-model="outDir" />
+      </StepCard>
+
+      <StepCard :step="4" title="保存">
+        <div class="form-row">
+          <div class="form-item">
+            <label>格式</label>
+            <el-radio-group v-model="annoFormat">
+              <el-radio-button value="image/png">PNG（无损，支持透明）</el-radio-button>
+              <el-radio-button value="image/jpeg">JPG（更小）</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="form-item" v-if="annoFormat === 'image/jpeg'">
+            <label>质量 {{ annoQuality }}%</label>
+            <el-slider v-model="annoQuality" :min="50" :max="100" style="width: 140px" />
+          </div>
+          <div class="form-item">
+            <el-button type="primary" :loading="annoBusy" @click="runAnnoSave">保存结果</el-button>
+          </div>
+        </div>
+        <ResultPanel :outputs="annoOutput ? [annoOutput] : []" />
       </StepCard>
     </template>
   </div>

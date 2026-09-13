@@ -174,6 +174,11 @@ async function copyContact() {
   }
 }
 
+function replayOnboard() {
+  // 置回未引导状态，App.vue 的 WelcomeDialog 会立即弹出
+  void updateSettings({ onboarded: false })
+}
+
 function openReleaseNotes() {
   void api.openExternal('https://github.com/ruai0/Lantai/releases/latest')
 }
@@ -362,9 +367,9 @@ function fmtTime(t: number): string {
     <div class="about">
       <div class="about-l">
         <el-icon><Setting /></el-icon>
-        <span>兰台（Lantai）v{{ version }}</span>
+        <span>兰台 v{{ version }}</span>
         <span class="about-dot">·</span>
-        <span>© 2026 <b>ruai0</b> · 个人免费，单位使用需授权（详见 LICENSE）</span>
+        <span>© 2026 <b>ruai0</b> · 个人免费，单位使用需授权</span>
         <span class="about-dot">·</span>
         <a class="about-link" @click="openRepo">github.com/ruai0/Lantai ↗</a>
         <template v-if="license.enforce">
@@ -375,6 +380,7 @@ function fmtTime(t: number): string {
         </template>
       </div>
       <div class="about-r">
+        <el-button link type="primary" size="small" @click="replayOnboard">重看新手指引</el-button>
         <a class="about-link" title="点击复制邮箱" @click="copyContact">反馈 · 授权：1393930984@qq.com</a>
         <el-button link type="primary" size="small" @click="copyDiagnostics">复制诊断信息</el-button>
       </div>
@@ -484,6 +490,7 @@ function fmtTime(t: number): string {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  white-space: nowrap;
 }
 .about-r {
   margin-left: auto;

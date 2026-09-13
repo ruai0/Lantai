@@ -1,0 +1,32 @@
+name: CI
+
+# 质量门禁：main 推送与 PR 时跑静态检查 + 单测（UI 冒烟需 GUI 会话，发版前本地跑 test:ui）。
+# 构建发布是另一条流水线，见 release.yml（tag 触发）。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 渲染层静态检查
+        run: node scripts/check-renderer.mjs
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm run test

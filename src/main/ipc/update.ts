@@ -7,6 +7,9 @@ import type { UpdateState } from '@shared/types'
 import { handle } from './wrapper'
 import { getSettings } from '../services/settingsService'
 import { logMain } from '../services/log'
+import { DEFAULT_UPDATE_FEED, parseUpdateFeed } from '../services/updateFeed'
+
+export { DEFAULT_UPDATE_FEED, parseUpdateFeed }
 
 /**
  * 自动更新（electron-updater，NSIS + latest.yml，任意 HTTP(S) 静态托管）。
@@ -15,9 +18,6 @@ import { logMain } from '../services/log'
  * - 未做代码签名：verifyUpdateCodeSignature 关掉；包体完整性由 latest.yml 里的 SHA-512 保证。
  * - 检查通过后自动后台下载，下载完成推 'ready'，渲染层引导用户「重启安装」。
  */
-
-/** 内置官方更新源：用户零配置即可收到更新；设置里填地址则覆盖（镜像/内网发布场景） */
-export const DEFAULT_UPDATE_FEED = 'https://github.com/ruai0/Lantai'
 
 let state: UpdateState = { phase: 'idle', current: app.getVersion() }
 /** 托盘「检查更新」触发的轮次：结果额外弹系统 toast（窗口此刻多半没在前台） */
@@ -67,21 +67,15 @@ function notesOf(info: UpdateInfo): string | undefined {
   return undefined
 }
 
-/** 应用更新源：未配置则走内置官方源；填 off 彻底禁用（物理断网机器的显式开关）。github.com/<owner>/<repo> 走 GitHub Releases，其余按通用静态目录 */
+/** 应用更新源；返回是否可用 */
 function applyFeed(): boolean {
   const raw = getSettings().updateFeed.trim()
-  if (/^(off|none|-)$/i.test(raw)) return false
-  const feed = raw || DEFAULT_UPDATE_FEED
-  if (!/^https?:\/\//i.test(feed)) {
-    logMain('warn', `updateFeed 非 http(s) 地址，忽略：${feed}`)
+  const parsed = parseUpdateFeed(raw)
+  if (!parsed) {
+    if (!/^(off|none|-)$/i.test(raw)) logMain('warn', `updateFeed 非 http(s) 地址，忽略：${raw}`)
     return false
   }
-  const gh = feed.match(/^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/?$/i)
-  if (gh) {
-    autoUpdater.setFeedURL({ provider: 'github', owner: gh[1], repo: gh[2] })
-    return true
-  }
-  autoUpdater.setFeedURL({ provider: 'generic', url: feed })
+  autoUpdater.setFeedURL(parsed)
   return true
 }
 

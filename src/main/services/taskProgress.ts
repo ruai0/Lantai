@@ -20,6 +20,8 @@ export class TaskCancelledError extends Error {
 }
 
 export interface TaskHandle {
+  /** 主进程任务 id；渲染层经 task:update 拿到后调 cancelTask */
+  readonly id: number
   /** done 单调不回退；条目数执行中才知的任务（如打包）可带 total 修正分母 */
   progress(done: number, total?: number): void
   isCancelled(): boolean
@@ -51,6 +53,7 @@ export function beginTask(label: string, total: number): TaskHandle {
   active.set(id, { id, label, done: 0, total: Math.max(1, total), state: 'running', cancelled: false })
   broadcast()
   return {
+    id,
     progress(done: number, total?: number): void {
       const t = active.get(id)
       if (!t) return

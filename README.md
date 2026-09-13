@@ -48,9 +48,9 @@
 |---|---|
 | `lantai-setup-x.y.z.exe` | **Windows 安装版（推荐）**：安装向导 + 桌面快捷方式 + 自动更新 |
 | `lantai-portable-x.y.z.exe` | **Windows 便携版**：双击即用，免安装，不参与自动更新 |
-| `lantai-x.y.z-linux-x64.deb` | **麒麟 / Linux 测试版（x64）**：兆芯 / 海光等 x86_64 机器，`sudo dpkg -i` 安装 |
+| `lantai-x.y.z-linux-amd64.deb` | **麒麟 / Linux 测试版（x86_64）**：兆芯 / 海光等机器，`sudo dpkg -i` 安装 |
 | `lantai-x.y.z-linux-arm64.deb` | **麒麟 / Linux 测试版（arm64）**：飞腾 / 鲲鹏等 ARM64 机器（银河麒麟 V10 常见） |
-| `lantai-x.y.z-linux-*.AppImage` | **麒麟 / Linux 测试版**：免安装单文件，`chmod +x` 后直接运行 |
+| `lantai-x.y.z-linux-x86_64.AppImage` / `…-arm64.AppImage` | **麒麟 / Linux 测试版**：免安装单文件，`chmod +x` 后直接运行 |
 | `SHA256SUMS.txt` / `SHA256SUMS-linux.txt` | 校验包完整性：Windows `certutil -hashfile 文件 SHA256`，Linux `sha256sum -c` |
 
 > **系统要求**：Windows 版需 Win10 及以上、x64（Electron 44 不支持 Win7/8）；麒麟 / Linux 版为**测试版**，支持 x64 与 arm64，Office 转 PDF 依赖系统安装的 LibreOffice（未装会明确提示）。

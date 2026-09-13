@@ -1,0 +1,57 @@
+name: Mirror to Gitee
+
+# 国内镜像：GitHub 仍是主仓库，这里把代码与标签单向同步到 Gitee（https://gitee.com/ruai0/lantai），
+# 供连不上 GitHub 的用户浏览源码、提 Issue 参考、自行构建。
+#
+# 单向同步：不要直接在 Gitee 上提交，下次镜像会覆盖；改动一律走 GitHub。
+# 产物（安装包）不走这里，原因见 docs/operations.md「国内镜像」一节。
+#
+# 需要仓库 secret：GITEE_SSH_KEY（Gitee 部署公钥的私钥）。未配置时本流水线直接跳过，不产生失败。
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-gitee
+
+jobs:
+  code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 镜像需要完整历史与全部标签
+          fetch-depth: 0
+
+      - name: 检查镜像凭据
+        id: gate
+        env:
+          GITEE_SSH_KEY: ${{ secrets.GITEE_SSH_KEY }}
+        run: |
+          if [ -n "$GITEE_SSH_KEY" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else
+            echo "::notice::未配置 GITEE_SSH_KEY，跳过 Gitee 镜像"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 配置部署公钥
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GITEE_SSH_KEY: ${{ secrets.GITEE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$GITEE_SSH_KEY" > ~/.ssh/gitee_deploy
+          chmod 600 ~/.ssh/gitee_deploy
+          ssh-keyscan -t rsa,ed25519 gitee.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 推送分支与标签
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/gitee_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+        run: |
+          git remote add gitee git@gitee.com:ruai0/lantai.git
+          # 只推 branches + tags，不用 --mirror：避免误删对端独有引用
+          git push gitee --force --all --tags
+          echo "已同步 ${{ github.ref_name }} → gitee.com/ruai0/lantai"

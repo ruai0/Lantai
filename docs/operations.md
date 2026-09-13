@@ -22,6 +22,30 @@ npm run release 0.6.2
 - 增量更新：`.blockmap` 让升级只下载变化字节段。
 - 只有 NSIS 安装版参与自动更新；便携版不参与。
 
+## 国内镜像（Gitee）
+
+连不上 GitHub 的用户：镜像仓库 https://gitee.com/ruai0/lantai （源码、Issue 参考、自行构建）。
+
+**代码镜像已自动化**：`.github/workflows/mirror-gitee.yml` 在 main 推送与打 `v*` 标签时，把分支和标签单向同步到 Gitee。一次性配置：
+
+```bash
+ssh-keygen -t ed25519 -f ./gitee_deploy -C "lantai-github-actions" -N ""
+# 公钥 gitee_deploy.pub → Gitee 仓库「设置 → 部署公钥」（勾选提供推送权限）
+# 私钥 gitee_deploy   → GitHub 仓库 secret GITEE_SSH_KEY（填整个私钥文本）
+```
+
+未配置该 secret 时流水线自动跳过，不会报错。同步是 `--force` 单向覆盖：**改动一律走 GitHub，不要在 Gitee 上提交**。
+
+**产物（安装包）镜像暂未启用**，两个实测结论：
+
+- `https://gitee.com/api/v5/repos/ruai0/lantai/releases/latest` 返回 **404** —— Gitee 没有 `latest` 别名，附件直链只认 `https://gitee.com/<owner>/<repo>/releases/download/<tag>/<文件>`，路径含版本号，无法作为 electron-updater 需要的固定目录。
+- 安装包 108–122MB（见 `release/`），个人版发行版附件上限常见为 100MB，**需先在自己的 Gitee 账号上实测能否传一个 110MB 附件**。
+
+两条可选路线：
+
+1. Gitee 滚动标签：维护一个固定 tag `latest` 的发行版，每次发版把 `latest.yml` + setup + blockmap 重传到它下面，把该 tag 的直链目录作为通用更新源。要求附件能过大小限制，且需验证匿名下载（不登录能否取到文件）。
+2. 国内对象存储（推荐）：产物传腾讯云 COS / 阿里云 OSS 公共读桶，`https://<bucket>/<path>/lantai/` 作为通用更新源，electron-updater 原生支持，发版流水线只需多一步 `coscmd upload` / `ossutil cp`。用户在「设置 → 软件更新」填这一条地址即可，与内网镜像走的是同一套 generic 机制。
+
 ## 运维排障（用户机器）
 
 - 主日志：`%APPDATA%/兰台/logs/main-YYYYMMDD.log`（启动记录 + 所有 IPC 业务异常 + 未捕获异常，超 5MB 轮转 .old）。用户报障先要这份，或让用户「设置 → 复制诊断信息」一键带上环境 + 日志尾巴。

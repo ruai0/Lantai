@@ -7,6 +7,7 @@ import App from './App.vue'
 import router from './router'
 import './styles/app.css'
 import { initSettings } from './utils/settings'
+import { initRememberedParams } from './utils/useRememberedParams'
 import { api } from './utils/ipc'
 
 // 拖拽文件落在非拖拽区时，浏览器默认会导航到 file://，整个应用被替换。
@@ -33,7 +34,10 @@ window.addEventListener('unhandledrejection', e => reportError('promise', e.reas
 
 // 立即挂载，保证应用尽早可交互；偏好加载后异步应用主题/默认目录。
 // 默认 :root 即浅色，深色用户仅在启动瞬间偏亮，无功能闪烁。
+// 唯一的例外：参数记忆快照必须在首个工具页挂载前就绪（useRemembered 为同步水合），
+// 它是本地小文件读取，耗时极短，先 await 再挂载。
 const app = createApp(App)
 app.config.errorHandler = (err, _instance, info) => reportError(`vue:${info}`, err)
+await initRememberedParams()
 app.use(router).use(ElementPlus, { locale: zhCn, size: 'small' }).mount('#app')
 void initSettings()

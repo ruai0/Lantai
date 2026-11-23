@@ -18,18 +18,33 @@ function walk(dir: string, root: string, out: WalkedFile[]): void {
   }
 }
 
-/** 把整个文件夹打包成一个 zip（保持子文件夹结构） */
+/** 把若干文件（保持相对 srcRoot 的目录结构）或整个文件夹打包成一个 zip */
 export async function packZip(
   params: ZipPackParams,
   onProgress?: (done: number, total: number) => void,
   isCancelled?: () => boolean
 ): Promise<{ outputPath: string; count: number }> {
-  if (!fs.existsSync(params.dir) || !fs.statSync(params.dir).isDirectory()) {
-    throw new Error('请选择要打包的文件夹')
-  }
   const files: WalkedFile[] = []
-  walk(params.dir, params.dir, files)
-  if (files.length === 0) throw new Error('该文件夹里没有文件')
+  let defaultBase = 'archive'
+  if (params.paths && params.paths.length) {
+    // 挑选文件模式：以共同父目录为根，保留层级；单文件时取其文件名
+    const root = commonRoot(params.paths)
+    defaultBase = path.basename(root) || 'archive'
+    for (const p of params.paths) {
+      if (isCancelled?.()) throw new TaskCancelledError()
+      if (!fs.existsSync(p) || !fs.statSync(p).isFile()) continue
+      const rel = path.relative(root, p).split(path.sep).join('/') || path.basename(p)
+      files.push({ relPath: rel, fullPath: p })
+    }
+    if (files.length === 0) throw new Error('没有可打包的文件')
+  } else {
+    if (!params.dir || !fs.existsSync(params.dir) || !fs.statSync(params.dir).isDirectory()) {
+      throw new Error('请选择要打包的文件夹（或选择若干文件）')
+    }
+    walk(params.dir, params.dir, files)
+    if (files.length === 0) throw new Error('该文件夹里没有文件')
+    defaultBase = path.basename(params.dir) || 'archive'
+  }
   const zip = new PizZip()
   let done = 0
   for (const f of files) {
@@ -37,11 +52,91 @@ export async function packZip(
     zip.file(f.relPath, fs.readFileSync(f.fullPath), { binary: true })
     onProgress?.(++done, files.length)
   }
-  const name = (params.zipName?.trim() || path.basename(params.dir) || 'archive') + '.zip'
-  const content = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+  const zn = (params.zipName?.trim() ?? '').replace(/\.zip$/i, '').trim()
+  const name = (zn || defaultBase) + '.zip'
+  // 压缩级别：store = 仅打包不压缩（最快）；9 = 最高压缩（最小体积）
+  const level = params.level ?? 'normal'
+  let content: Buffer
+  if (level === 'store') {
+    content = zip.generate({ type: 'nodebuffer', compression: 'STORE' })
+  } else {
+    const opt = { type: 'nodebuffer' as const, compression: 'DEFLATE' as const, compressionOptions: { level: (level === 'max' ? 9 : 6) as 9 | 6 } }
+    content = zip.generate(opt)
+  }
   const out = uniquePath(params.outDir, name)
   await fs.promises.writeFile(out, content)
   return { outputPath: out, count: files.length }
+}
+
+/**
+ * 检测 zip 是否加密：遍历中央目录区的每个条目，检查通用位标志（General Purpose Bit Flag）的 bit 0。
+ * PizZip（JSZip 分支）不支持加密条目，会抛“文件损坏”之类的误导性错误，这里提前甄别。
+ */
+function detectEncryptedZip(buf: Buffer): boolean {
+  const EOCD_SIG = 0x06054b50
+  const CEN_SIG = 0x02014b50
+  // 1) 从尾部往前找 End Of Central Directory（最多扫描 64KB + 22 字节）
+  let eocd = -1
+  const scanStart = Math.max(0, buf.length - 65557)
+  for (let i = buf.length - 22; i >= scanStart; i--) {
+    if (buf.readUInt32LE(i) === EOCD_SIG) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) return false
+  // 2) 定位中央目录起始偏移与条目数
+  const cenOffset = buf.readUInt32LE(eocd + 16)
+  let p = cenOffset
+  // 3) 逐个条目读取 flag 字段（偏移 +8）
+  while (p + 46 <= buf.length && buf.readUInt32LE(p) === CEN_SIG) {
+    const flag = buf.readUInt16LE(p + 8)
+    if ((flag & 0x0001) !== 0) return true
+    const nameLen = buf.readUInt16LE(p + 28)
+    const extraLen = buf.readUInt16LE(p + 30)
+    const commentLen = buf.readUInt16LE(p + 32)
+    p += 46 + nameLen + extraLen + commentLen
+  }
+  return false
+}
+
+/** 求若干文件路径的最长公共目录 */
+function commonRoot(paths: string[]): string {
+  if (paths.length === 1) return path.dirname(paths[0])
+  const split = paths.map(p => path.dirname(p).split(path.sep))
+  const first = split[0]
+  let i = 0
+  for (; i < first.length; i++) {
+    if (!split.every(s => s[i] === first[i])) break
+  }
+  const root = first.slice(0, i).join(path.sep) || path.sep
+  // 若共同父目录恰好是某个文件本身所在目录，仍以它为根即可
+  return root
+}
+
+/** 列出 zip 将包含的文件清单（打包前预览，避免盲打包） */
+export async function listZipContents(params: {
+  dir?: string
+  paths?: string[]
+}): Promise<{ files: Array<{ rel: string; sizeBytes: number }>; totalBytes: number }> {
+  const files: WalkedFile[] = []
+  if (params.paths && params.paths.length) {
+    const root = commonRoot(params.paths)
+    for (const p of params.paths) {
+      if (!fs.existsSync(p) || !fs.statSync(p).isFile()) continue
+      const rel = path.relative(root, p).split(path.sep).join('/') || path.basename(p)
+      files.push({ relPath: rel, fullPath: p })
+    }
+  } else if (params.dir && fs.existsSync(params.dir) && fs.statSync(params.dir).isDirectory()) {
+    walk(params.dir, params.dir, files)
+  }
+  let totalBytes = 0
+  const list = files.map(f => {
+    const sizeBytes = fs.statSync(f.fullPath).size
+    totalBytes += sizeBytes
+    return { rel: f.relPath, sizeBytes }
+  })
+  return { files: list, totalBytes }
 }
 
 /** 解压 zip（或一批 zip），每个包解到独立子文件夹，绝不覆盖输出目录已有文件 */
@@ -50,6 +145,11 @@ export async function unpackZip(params: ZipUnpackParams): Promise<ZipUnpackResul
   const outputs: string[] = []
   for (const p of params.paths) {
     const buf = await fs.promises.readFile(p)
+    // 加密 zip 的目录区含 flag bit 0，PizZip 不支持读取——提前给出准确提示而不是误报“文件损坏”
+    const encrypted = detectEncryptedZip(buf)
+    if (encrypted) {
+      throw new Error(`该 zip 已加密，暂不支持解压：${path.basename(p)}`)
+    }
     let zip: PizZip
     try {
       zip = new PizZip(buf)

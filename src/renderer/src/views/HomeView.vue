@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import { groupedTools, toolByPath, type ToolDef } from '../tools'
 import { favorites, isFavorite, toggleFavorite } from '../utils/settings'
+import { recentToolPaths } from '../utils/recentTools'
 import { api } from '../utils/ipc'
 
 const router = useRouter()
@@ -19,16 +20,23 @@ function openRepo(): void {
   void api.openExternal('https://github.com/ruai0/Lantai')
 }
 
-let seq = 0
-const indexed = computed(() =>
-  groupedTools().map(g => ({
-    ...g,
-    tools: g.tools.map(t => ({ ...t, idx: String(++seq).padStart(2, '0') }))
-  }))
-)
+const indexed = computed(() => groupedTools())
 const total = computed(() => groupedTools().reduce((n, g) => n + g.tools.length, 0))
-
 const pinned = computed<ToolDef[]>(() => favorites.value.map(p => toolByPath(p)).filter((t): t is ToolDef => !!t))
+
+/**
+ * 最近使用：自动按使用频次排，排除已收藏的（收藏区已经列了，重复出现反而浪费版面）。
+ * 每次回到首页重算一次，这样从工具页返回就能看到最新顺序。
+ */
+const recent = ref<ToolDef[]>([])
+function refreshRecent(): void {
+  recent.value = recentToolPaths(4)
+    .filter(p => !isFavorite(p))
+    .map(p => toolByPath(p))
+    .filter((t): t is ToolDef => !!t)
+}
+onMounted(refreshRecent)
+onActivated(refreshRecent)
 
 async function toggle(t: ToolDef, e: Event): Promise<void> {
   e.stopPropagation()
@@ -101,6 +109,22 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
       </div>
     </section>
 
+    <!-- 最近使用：一行紧凑标签。下方分组里本来就有同样的工具，
+         做成大卡片会和分组重复展示、白占首屏高度 -->
+    <section v-if="recent.length" class="recent-bar">
+      <span class="recent-label">最近</span>
+      <button
+        v-for="t in recent"
+        :key="'recent-' + t.path"
+        class="recent-chip"
+        :title="t.desc"
+        @click="router.push(t.path)"
+      >
+        <el-icon :size="14"><component :is="t.icon" /></el-icon>
+        <span>{{ t.name }}</span>
+      </button>
+    </section>
+
     <section v-for="g in indexed" :key="g.title">
       <div class="section-label">
         <span>{{ g.title }}</span>
@@ -121,7 +145,6 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
             </div>
             <div>
               <div class="tool-name">{{ t.name }}</div>
-              <div class="tool-idx">NO.{{ t.idx }}</div>
             </div>
           </div>
           <div class="tool-desc">{{ t.desc }}</div>
@@ -199,5 +222,41 @@ async function toggle(t: ToolDef, e: Event): Promise<void> {
 }
 .home-foot-link:hover {
   color: var(--amber);
+}
+
+/* 最近使用：一行标签条。与下方分组重复的工具不再各占一张大卡片 */
+.recent-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.recent-label {
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.recent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.recent-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 </style>

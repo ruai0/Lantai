@@ -35,4 +35,11 @@ describe('maskValue', () => {
   it('非字符串数字按文本处理', () => {
     expect(maskValue('13812345678', 'custom', 3, 4)).toBe('138****5678')
   })
+
+  it('可自定义掩码字符', () => {
+    expect(maskValue('13812345678', 'phone', 0, 0, '●')).toBe('138●●●●5678')
+    expect(maskValue('ABCDEF', 'custom', 1, 1, '#')).toBe('A####F')
+    // 掩码字符为空时回退 *
+    expect(maskValue('13812345678', 'phone', 0, 0, '')).toBe('138****5678')
+  })
 })

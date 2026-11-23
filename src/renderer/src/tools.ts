@@ -64,6 +64,15 @@ export const TOOLS: ToolDef[] = [
     keywords: ['模板', '填充', '通知书', '证明', 'mailmerge', '批量生成']
   },
   {
+    path: '/wordfmt',
+    name: 'Word 排版',
+    desc: '公文国标一键套用：统一正文字体字号行距缩进、三级标题字体、页边距；可批量',
+    group: '文档与 PDF',
+    caption: '报送、归档、盖章',
+    icon: markRaw(Document),
+    keywords: ['word', '排版', '格式', '公文', '字体', '字号', '行距', '缩进', '页边距', '仿宋', '黑体', '小标宋', 'gbt', '9704']
+  },
+  {
     path: '/replace',
     name: '批量查找替换',
     desc: '多个 Word / Excel 一次改文字，适合更名、改日期',

@@ -1,7 +1,13 @@
 import { app } from 'electron'
 import type { AppSettings, HistoryEntry } from '@shared/settings'
+import type { RememberedParams } from '@shared/params'
 import { handle } from './wrapper'
 import { addHistory, clearHistory, getHistory, getSettings, saveSettings } from '../services/settingsService'
+import {
+  clearRememberedParams,
+  getRememberedParams,
+  saveViewParams
+} from '../services/paramsService'
 import { logMain } from '../services/log'
 
 handle('settings:get', (): AppSettings => getSettings())
@@ -21,3 +27,9 @@ handle('settings:version', (): string => app.getVersion())
 handle('history:get', (): HistoryEntry[] => getHistory())
 handle('history:add', (entry: HistoryEntry): HistoryEntry[] => addHistory(entry))
 handle('history:clear', (): HistoryEntry[] => clearHistory())
+// 工具参数记忆：按视图存/取，以及清空
+handle('params:get', (): RememberedParams => getRememberedParams())
+handle('params:set-view', (p: { view: string; patch: Record<string, unknown> }): RememberedParams =>
+  saveViewParams(p?.view ?? '', p?.patch ?? {})
+)
+handle('params:clear', (): RememberedParams => clearRememberedParams())

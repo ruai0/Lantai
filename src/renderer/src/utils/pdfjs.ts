@@ -40,12 +40,34 @@ export async function openPdf(data: Uint8Array, timeoutMs = 30000) {
   }
 }
 
-/** 读取 PDF 的页数（主进程完成，不需要渲染） */
+/** 读取 PDF 原始字节：走二进制通道，避免 base64 编码 + atob 解码的额外开销 */
 export async function readPdfBytes(path: string): Promise<Uint8Array> {
-  const res = await api.readFiles([path])
+  const res = await api.readBytes({ path })
   if (!res.ok) throw new Error(res.error)
-  const bin = atob(res.data[0].base64)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes
+  return res.data
+}
+
+/**
+ * 抽取 PDF 全部文本（供“提取联系方式”等复用）。
+ * 文本型 PDF 直接取文本层；扫描件（无文本层）返回空串——调用方据此提示用户。
+ * 用 hasText 标记本页是否有文本层，方便上层统计。
+ */
+export async function extractPdfText(path: string): Promise<string> {
+  const bytes = await readPdfBytes(path)
+  const { doc, close } = await openPdf(bytes)
+  try {
+    const parts: string[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      const content = await page.getTextContent()
+      const line = content.items
+        .map(it => ('str' in it ? it.str : ''))
+        .join('')
+      parts.push(line)
+      page.cleanup()
+    }
+    return parts.join('\n')
+  } finally {
+    await close()
+  }
 }

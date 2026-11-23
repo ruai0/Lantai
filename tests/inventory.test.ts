@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { groupDuplicates, humanSize, type FileEntry } from '../src/main/services/inventoryService'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { groupDuplicates, humanSize, resolveDuplicates, type FileEntry } from '../src/main/services/inventoryService'
 
 function entry(path: string, sizeBytes: number): FileEntry {
   return { path, relPath: path, name: path, ext: '.bin', sizeBytes, mtimeMs: 0 }
@@ -72,5 +75,41 @@ describe('humanSize', () => {
   it('非法输入回退 0 B', () => {
     expect(humanSize(-1)).toBe('0 B')
     expect(humanSize(NaN)).toBe('0 B')
+  })
+})
+
+describe('resolveDuplicates', () => {
+  let tmp: string
+  beforeAll(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dup-resolve-'))
+  })
+  afterAll(() => {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('每组保留一份，其余移入 _重复文件（不删除）', async () => {
+    const d = path.join(tmp, 'case1')
+    fs.mkdirSync(d, { recursive: true })
+    const p1 = path.join(d, 'a.txt')
+    const p2 = path.join(d, 'b.txt')
+    fs.writeFileSync(p1, 'same')
+    fs.writeFileSync(p2, 'same')
+    const groups = [
+      {
+        hash: 'h',
+        sizeBytes: 4,
+        files: [
+          { path: p1, name: 'a.txt', sizeBytes: 4 },
+          { path: p2, name: 'b.txt', sizeBytes: 4 }
+        ]
+      }
+    ]
+    const r = await resolveDuplicates({ groups, keep: 'earliest' })
+    expect(r.moved).toBe(1)
+    expect(r.kept).toBe(1)
+    // 原件与移动副本都在，没有任何文件被删除
+    const trash = fs.readdirSync(path.join(d, '_重复文件'))
+    expect(trash.length).toBe(1)
+    expect(fs.existsSync(p1) || fs.existsSync(p2)).toBe(true)
   })
 })

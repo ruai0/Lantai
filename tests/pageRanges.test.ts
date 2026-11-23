@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRanges } from '../src/main/services/rangeUtils'
+import { parseRanges } from '../src/shared/pageRanges'
 
 describe('parseRanges', () => {
   it('解析单页与区间混合', () => {

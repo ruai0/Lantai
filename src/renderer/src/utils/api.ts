@@ -18,7 +18,9 @@ function extractOutputs(data: unknown): string[] {
 export async function call<T>(p: Promise<ApiResult<T>>, successMsg?: string): Promise<T | null> {
   const res = await p
   if (!res.ok) {
-    ElMessage.error(res.error)
+    // 用户自己点的取消不是错误，弹红色会让人以为出故障了
+    if (/已取消|任务已取消|cancel/i.test(res.error)) ElMessage.info(res.error)
+    else ElMessage.error(res.error)
     return null
   }
   if (successMsg) {

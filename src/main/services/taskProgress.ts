@@ -24,8 +24,11 @@ export interface TaskHandle {
   readonly id: number
   /** done 单调不回退；条目数执行中才知的任务（如打包）可带 total 修正分母 */
   progress(done: number, total?: number): void
+  /** 运行时改标签（两段式任务从"扫描"切到"比对"时用） */
+  updateLabel(label: string): void
   isCancelled(): boolean
-  finish(state?: TaskState): void
+  /** 收尾；带 outputs 时任务坞会停留更久并显示「打开」 */
+  finish(state?: TaskState, outputs?: string[]): void
 }
 
 interface TaskRecord extends TaskSnapshot {
@@ -61,19 +64,32 @@ export function beginTask(label: string, total: number): TaskHandle {
       t.done = Math.max(t.done, Math.min(done, t.total))
       broadcast()
     },
+    updateLabel(label: string): void {
+      const t = active.get(id)
+      if (!t) return
+      t.label = label
+      broadcast()
+    },
     isCancelled(): boolean {
       return active.get(id)?.cancelled === true
     },
-    finish(state: TaskState = 'done'): void {
+    /**
+     * 收尾。
+     * 完成态若带产出，停留 8 秒而不是 2.2 秒——2 秒连"跑完了"都看不清，
+     * 更别说去点任务坞里的「打开文件夹」。无产出的短任务仍快速消失，不占地方。
+     */
+    finish(state: TaskState = 'done', outputs?: string[]): void {
       const t = active.get(id)
       if (!t) return
       t.state = state
       if (state === 'done') t.done = t.total
+      if (outputs?.length) t.outputs = outputs
       broadcast()
+      const hold = state === 'running' ? 0 : state === 'done' ? (outputs?.length ? 8000 : 2200) : 5000
       setTimeout(() => {
         active.delete(id)
         broadcast()
-      }, state === 'running' ? 0 : state === 'done' ? 2200 : 5000)
+      }, hold)
     }
   }
 }
@@ -99,12 +115,25 @@ export interface TaskCtx {
   isCancelled(): boolean
 }
 
+/** 从服务返回值里挑出产出路径（各服务约定不同：outputs[] / outputPath / path） */
+function outputsOf(r: unknown): string[] | undefined {
+  if (!r || typeof r !== 'object') return undefined
+  const d = r as Record<string, unknown>
+  if (Array.isArray(d.outputs)) {
+    const list = d.outputs.filter((x): x is string => typeof x === 'string')
+    return list.length ? list : undefined
+  }
+  if (typeof d.outputPath === 'string') return [d.outputPath]
+  return undefined
+}
+
 export async function runTracked<T>(label: string, total: number, fn: (ctx: TaskCtx) => Promise<T>): Promise<T> {
   const t = beginTask(label, total)
   const ctx: TaskCtx = { progress: (d, total2) => t.progress(d, total2), isCancelled: () => t.isCancelled() }
   try {
     const r = await fn(ctx)
-    t.finish()
+    // 把产出交给任务坞，完成后可直接点开输出文件夹
+    t.finish('done', outputsOf(r))
     return r
   } catch (e) {
     t.finish(e instanceof TaskCancelledError ? 'cancelled' : 'error')

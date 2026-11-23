@@ -118,6 +118,8 @@ function close(): void {
 }
 
 function onKey(e: KeyboardEvent): void {
+  // 输入法组合中（打拼音挑候选字）的回车不归我们管，否则会在搜索时误执行命令
+  if (e.isComposing || e.keyCode === 229) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     active.value = Math.min(active.value + 1, filtered.value.length - 1)

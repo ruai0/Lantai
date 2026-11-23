@@ -23,6 +23,10 @@ export interface AppSettings {
   autoStart: boolean
   /** 新用户首次启动的步骤指引是否已完成 */
   onboarded: boolean
+  /** 记住各工具上次使用的参数，下次打开自动回填（不记忆文件路径） */
+  rememberParams: boolean
+  /** 侧栏默认收起为图标栏，给工具区让出宽度；随时可用 Ctrl+B 展开 */
+  sidebarCollapsed: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -34,7 +38,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   updateFeed: '',
   onClose: 'ask',
   autoStart: false,
-  onboarded: false
+  onboarded: false,
+  rememberParams: true,
+  sidebarCollapsed: false
 }
 
 /** 归一化：缺字段补默认、非法枚举回退，兼容旧配置文件 */
@@ -60,7 +66,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
     updateFeed: typeof s.updateFeed === 'string' ? s.updateFeed : '',
     onClose,
     autoStart: s.autoStart === true,
-    onboarded: s.onboarded === true
+    onboarded: s.onboarded === true,
+    rememberParams: s.rememberParams !== false,
+    sidebarCollapsed: s.sidebarCollapsed === true
   }
 }
 

@@ -29,7 +29,8 @@
   /* --- 墨色文字 --- */
   --text-1: #16202e;
   --text-2: #52617a;
-  --text-3: #8a96a8;
+  /* 提示/辅助文字：加深以达无障碍 AA（原 #8a96a8 在纸面底仅约 2.6:1，对中老年用户偏浅） */
+  --text-3: #6b7890;
 
   /* --- 信号色（琥珀 / 余烬） --- */
   --accent: #d4501a;
@@ -62,7 +63,8 @@
   --el-color-primary-dark-2: var(--accent-strong);
 
   --el-font-family: var(--font-body);
-  --el-font-size-base: 13px;
+  /* 基准字号 14px：目标用户含中老年办公人员，13px 阅读吃力 */
+  --el-font-size-base: 14px;
   --el-border-radius-base: 6px;
   --el-border-radius-small: 4px;
   --el-component-size-small: 30px;
@@ -97,7 +99,7 @@ body,
 }
 body {
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 14px;
   background: var(--paper);
   color: var(--text-1);
   -webkit-font-smoothing: antialiased;
@@ -198,7 +200,9 @@ body {
   background: rgba(255, 255, 255, 0.18);
   background-clip: content-box;
 }
-.app-menu .el-menu-item-group__title {
+/* 分组标题自绘（不用 el-menu-item-group：EP 折叠态既不隐藏标题也不给 nowrap，中文会竖排）；
+   菜单项是 el-menu 直接子级，EP 的 `.el-menu--collapse>.el-menu-item>span` 隐藏规则才生效 */
+.rail-group-title {
   font-family: var(--font-display);
   font-size: 10px;
   letter-spacing: 0.2em;
@@ -206,6 +210,52 @@ body {
   color: #55667d;
   padding: 14px 8px 6px;
   line-height: 1.4;
+}
+/* 折叠态：标题换成一条浅分隔线，图标分组仍然可辨 */
+.rail-group-rule {
+  margin: 10px 10px 8px;
+  border-top: 1px solid var(--rail-line);
+}
+/* 折叠态几何写死：EP 自己按 64px 菜单宽算的居中会被我们 8px 内距带偏，
+   这里让菜单吃满 64px 侧栏、项去左右距、文字居中，图标才真正居中 */
+.app-menu.el-menu--collapse {
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+.app-menu.el-menu--collapse > .el-menu-item {
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+/* 折叠/展开瞬时切换，去掉 EP 自带的 collapse 过渡：
+   它是 mode="out-in"（旧菜单先播 300ms 宽度收缩、新菜单才入场），而侧栏宽度绑定是瞬间跳的，
+   这 300ms 里超宽的旧菜单被 64px 侧栏裁出半截标签；宽度动画还会让重页面（48 张缩略图）
+   逐帧重排。瞬时切换没有中间态，也不会逐帧 layout，是最稳的做法。 */
+.app-menu.horizontal-collapse-transition,
+.app-menu.el-opacity-transition {
+  transition: none !important;
+}
+/* 兜底：瞬时切换后 EP 的 out-in 仍要两三帧才卸载旧菜单，这期间侧栏类已生效。
+   让旧菜单当场呈现折叠态（宽度吃满侧栏、标签隐藏、图标居中），过渡残留看不见。
+   注意 padding 必须 !important：EP 的 `.el-menu--vertical:not(.el-menu--collapse)…
+   .el-menu-item` 是 4 类选择器，旧菜单在过渡帧里正好不带 collapse 类，会压过常规写法。 */
+.rail-collapsed .app-menu {
+  width: 100% !important;
+}
+.rail-collapsed .app-menu .rail-label {
+  display: none;
+}
+.rail-collapsed .app-menu > .el-menu-item {
+  justify-content: center;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+/* 展开瞬间：EP 旧的（折叠态）菜单还要两帧才卸载，期间它停在 64px 宽、与已变宽的侧栏
+   不同步（观感 = 菜单慢半拍）。藏掉这两帧的旧菜单，新菜单随即整体入场。
+   折叠方向不藏——那边的旧菜单已被上面的规则改成逐像素一致的折叠态。 */
+.app-shell:not(.rail-collapsed) .app-menu.v-leave-active {
+  visibility: hidden;
 }
 .app-menu .el-menu-item {
   height: 34px;
@@ -423,13 +473,24 @@ body {
   font-family: var(--font-mono);
 }
 
+/* 主执行按钮所在行：与输出位置同卡片，紧跟其后 */
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
 .outdir-row {
   display: flex;
   gap: 8px;
-  max-width: 760px;
+  width: 100%;
+  /* 留一个上限只为超宽屏不至于拉成一条长线；1440 屏上基本撑满卡片 */
+  max-width: 980px;
 }
 .outdir-row .el-input {
-  max-width: 560px;
+  flex: 1;
+  max-width: none;
 }
 
 .result-extra {
@@ -790,19 +851,55 @@ body {
     0 0 0 1px var(--accent) inset,
     0 0 0 3px rgba(212, 80, 26, 0.12) !important;
 }
+/* 页签保持单行：紧凑字号与内边距，让页签最多的 PDF 工具在 1024 宽（侧栏展开）下也能完整显示；
+   实在放不下时 Element Plus 自带滚动箭头兜底，绝不允许折成两行。
+   想要更宽的内容区？收起侧栏（Ctrl B）能让出 150px。
+   整条页签栏给底色容器、激活页签给色块：原先只有一条细下划线，看起来像一行普通文字，
+   感知不到这是可切换的工具入口（用户反馈）。 */
+.el-tabs__header {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  padding: 0 8px;
+}
 .el-tabs__nav-wrap::after {
   height: 1px;
   background: var(--line);
 }
+.el-tabs__nav {
+  white-space: nowrap;
+}
 .el-tabs__item {
-  font-size: 13px;
-  letter-spacing: 0.03em;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  padding: 0 5px;
+  height: 34px;
+  line-height: 34px;
+  color: var(--text-2);
+  border-radius: 8px 8px 0 0;
+  transition: background 0.15s, color 0.15s;
+}
+.el-tabs__item:hover {
+  color: var(--accent);
+  background: var(--surface);
+}
+.el-tabs__item.is-active {
+  color: var(--accent);
+  background: var(--accent-wash);
+  font-weight: 600;
 }
 .el-tabs__active-bar {
   background: var(--accent);
   height: 2px;
   border-radius: 2px;
 }
+/* 间距工具类：替代散落各视图的 style="margin-top: Npx" 内联，统一纵向节奏 */
+.mt-4 { margin-top: 4px; }
+.mt-6 { margin-top: 6px; }
+.mt-8 { margin-top: 8px; }
+.mt-10 { margin-top: 10px; }
+.mt-12 { margin-top: 12px; }
+.mt-14 { margin-top: 14px; }
 .el-table th.el-table__cell {
   background: var(--surface-2) !important;
   color: var(--text-2);
@@ -963,7 +1060,8 @@ html[data-theme='dark'] {
 
   --text-1: #e6ecf5;
   --text-2: #9fb0c6;
-  --text-3: #6b7c95;
+  /* 深色底提示文字略提亮，保证对比度 ≥ 4.5:1 */
+  --text-3: #8697b0;
 
   --accent-wash: rgba(212, 80, 26, 0.16);
   --diff-add: rgba(67, 199, 122, 0.14);

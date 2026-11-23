@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/convert', name: 'convert', component: () => import('../views/ConvertView.vue') },
     { path: '/office', name: 'office', component: () => import('../views/OfficeView.vue') },
     { path: '/replace', name: 'replace', component: () => import('../views/ReplaceView.vue') },
+    { path: '/wordfmt', name: 'wordfmt', component: () => import('../views/WordFmtView.vue') },
     { path: '/rename', name: 'rename', component: () => import('../views/RenameView.vue') },
     { path: '/filekit', name: 'filekit', component: () => import('../views/FileKitView.vue') },
     { path: '/tools', name: 'tools', component: () => import('../views/ToolsView.vue') },

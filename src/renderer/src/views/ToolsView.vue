@@ -5,9 +5,16 @@ import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
-import { basename, call } from '../utils/api'
+import ResultPanel from '../components/ResultPanel.vue'
+import { basename, call, callQ } from '../utils/api'
 import { diffLines, type DiffResult } from '@shared/textDiff'
 import type { HashAlgorithm, HashResult } from '@shared/types'
+import { useEnterSubmit } from '../utils/useEnterSubmit'
+import { useRemembered } from '../utils/useRememberedParams'
+import { extractPdfText } from '../utils/pdfjs'
+
+/** 填完参数按 Enter 直接执行当前页签的主操作 */
+useEnterSubmit()
 
 const tab = ref<'json' | 'codec' | 'timestamp' | 'uuid' | 'hash' | 'qrcode' | 'extract' | 'batchqr' | 'qrdecode' | 'pinyin' | 'diff'>('json')
 
@@ -113,10 +120,12 @@ function onDateChange(v: Date | null) {
 /* ---------- UUID ---------- */
 
 const uuidText = ref('')
+const uuidCount = ref(5)
 
 function genUuid() {
+  const n = Math.max(1, Math.min(1000, Math.floor(uuidCount.value) || 1))
   const list: string[] = []
-  for (let i = 0; i < 5; i++) list.push(crypto.randomUUID())
+  for (let i = 0; i < n; i++) list.push(crypto.randomUUID())
   uuidText.value = list.join('\n')
 }
 
@@ -126,6 +135,22 @@ const hashFiles = ref<string[]>([])
 const hashAlgo = ref<HashAlgorithm>('md5')
 const hashResults = ref<HashResult[]>([])
 const hashing = ref(false)
+const expectedHash = ref('')
+
+/** 逐条比对是否与预期值一致（收文件核对哈希是高频需求） */
+const hashMatchMap = computed(() => {
+  const map = new Map<string, boolean>()
+  const target = expectedHash.value.trim().toLowerCase()
+  if (!target) return map
+  for (const r of hashResults.value) map.set(r.path, r.hash.trim().toLowerCase() === target)
+  return map
+})
+
+const hashMatchedCount = computed(() => {
+  let n = 0
+  for (const v of hashMatchMap.value.values()) if (v) n++
+  return n
+})
 
 async function calcHash() {
   if (!hashFiles.value.length) {
@@ -134,7 +159,10 @@ async function calcHash() {
   }
   hashing.value = true
   try {
-    const r = await call(api.hashFiles({ paths: hashFiles.value, algorithm: hashAlgo.value }))
+    // 文件多时逐个算，走队列以便切页继续；进度/取消在右下角任务坞
+    const r = await callQ('计算文件哈希', () =>
+      api.hashFiles({ paths: hashFiles.value, algorithm: hashAlgo.value })
+    )
     if (r) hashResults.value = r
   } finally {
     hashing.value = false
@@ -148,6 +176,10 @@ const qrDataUrl = ref('')
 const qrError = ref('')
 const qrOutDir = ref('')
 const qrSaving = ref(false)
+const qrSize = ref(320)
+const qrMargin = ref(2)
+const qrEcc = ref<'L' | 'M' | 'Q' | 'H'>('M')
+const qrName = ref('')
 
 async function genQr() {
   qrError.value = ''
@@ -158,7 +190,11 @@ async function genQr() {
   }
   try {
     const QRCode = await import('qrcode')
-    qrDataUrl.value = await QRCode.toDataURL(qrText.value, { width: 260, margin: 2 })
+    qrDataUrl.value = await QRCode.toDataURL(qrText.value, {
+      width: qrSize.value,
+      margin: qrMargin.value,
+      errorCorrectionLevel: qrEcc.value
+    })
   } catch (e) {
     qrError.value = e instanceof Error ? e.message : String(e)
   }
@@ -173,7 +209,8 @@ async function saveQr() {
   qrSaving.value = true
   try {
     const b64 = qrDataUrl.value.split(',')[1] ?? ''
-    await call(api.writeBinary({ dir: qrOutDir.value, name: `qrcode_${Date.now()}.png`, base64: b64 }), '已保存')
+    const name = (qrName.value.trim() || `qrcode_${Date.now()}`) + '.png'
+    await call(api.writeBinary({ dir: qrOutDir.value, name, base64: b64 }), '已保存')
   } finally {
     qrSaving.value = false
   }
@@ -184,13 +221,15 @@ const hashName = computed(() => (p: string) => basename(p))
 /* ---------- 批量提取联系方式 ---------- */
 
 const DOC_FILTER = [
-  { name: '支持的文件', extensions: ['txt', 'csv', 'xlsx', 'docx'] }
+  { name: '支持的文件', extensions: ['txt', 'csv', 'xlsx', 'docx', 'pdf'] }
 ]
 const extractFiles = ref<string[]>([])
 const extractKinds = ref<Array<'phone' | 'idcard' | 'email'>>(['phone'])
 const extractDedupe = ref(true)
 const extractOutDir = ref('')
-const extractResult = ref<{ counts: Array<{ kind: string; label: string; count: number }>; outputs: string[] } | null>(null)
+const extractName = ref('')
+const extractEncoding = ref<'utf8' | 'gbk'>('utf8')
+const extractResult = ref<{ counts: Array<{ kind: string; label: string; count: number }>; outputs: string[]; failed?: Array<{ name: string; reason: string }> } | null>(null)
 const extractBusy = ref(false)
 
 async function runExtract() {
@@ -209,16 +248,34 @@ async function runExtract() {
   }
   extractBusy.value = true
   try {
+    // PDF 走渲染进程文本层抽取（pdf.js），抽到文本后交给主进程统一提取，保证与其它格式口径一致
+    const pdfs = extractFiles.value.filter(p => /\.pdf$/i.test(p))
+    const others = extractFiles.value.filter(p => !/\.pdf$/i.test(p))
+    const failed: Array<{ name: string; reason: string }> = []
+    const pdfTexts: Array<{ name: string; text: string }> = []
+    for (const p of pdfs) {
+      try {
+        const text = await extractPdfText(p)
+        if (!text.trim()) failed.push({ name: basename(p), reason: '未检测到文本层（可能是扫描件，请先 OCR）' })
+        else pdfTexts.push({ name: basename(p), text })
+      } catch (e) {
+        failed.push({ name: basename(p), reason: e instanceof Error ? e.message : String(e) })
+      }
+    }
     const r = await call(
       api.extractContacts({
-        paths: extractFiles.value,
+        paths: others,
+        texts: pdfTexts,
         kinds: extractKinds.value,
         dedupe: extractDedupe.value,
-        outDir: extractOutDir.value
+        outDir: extractOutDir.value,
+        name: extractName.value,
+        encoding: extractEncoding.value
       }),
       '提取完成'
     )
-    if (r) extractResult.value = r
+    if (r) extractResult.value = { ...r, failed: [...(r.failed ?? []), ...failed] }
+    else if (failed.length) extractResult.value = { counts: [], outputs: [], failed }
   } finally {
     extractBusy.value = false
   }
@@ -226,7 +283,7 @@ async function runExtract() {
 
 /* ---------- 批量二维码 ---------- */
 
-const DATA_FILTER = [{ name: '数据文件', extensions: ['xlsx', 'json'] }]
+const DATA_FILTER = [{ name: '数据文件', extensions: ['xlsx', 'csv', 'json'] }]
 const qrFiles = ref<string[]>([])
 const qrRecords = ref<Array<Record<string, string>>>([])
 const qrField = ref('')
@@ -257,7 +314,8 @@ function outNameOf(rec: Record<string, string>, i: number): string {
   return name || `qrcode_${i + 1}`
 }
 
-async function runBatchQr() {  batchQrOutputs.value = []
+async function runBatchQr() {
+  batchQrOutputs.value = []
   if (!qrRecords.value.length) {
     ElMessage.warning('请先选择数据文件并读取')
     return
@@ -274,11 +332,19 @@ async function runBatchQr() {  batchQrOutputs.value = []
   try {
     const QRCode = await import('qrcode')
     let ok = 0
+    let skipped = 0
     for (let i = 0; i < qrRecords.value.length; i++) {
       const rec = qrRecords.value[i]
       const content = (rec[qrField.value] ?? '').trim()
-      if (!content) continue
-      const dataUrl = await QRCode.toDataURL(content, { width: 400, margin: 2 })
+      if (!content) {
+        skipped++
+        continue
+      }
+      const dataUrl = await QRCode.toDataURL(content, {
+        width: qrSize.value,
+        margin: qrMargin.value,
+        errorCorrectionLevel: qrEcc.value
+      })
       const r = await api.writeBinary({
         dir: batchQrOutDir.value,
         name: `${outNameOf(rec, i)}.png`,
@@ -289,7 +355,8 @@ async function runBatchQr() {  batchQrOutputs.value = []
         ok++
       }
     }
-    ElMessage.success(`已生成 ${ok} 个二维码`)
+    const skipNote = skipped ? `，跳过 ${skipped} 行（内容为空）` : ''
+    ElMessage.success(`已生成 ${ok} 个二维码${skipNote}`)
   } finally {
     batchQrBusy.value = false
   }
@@ -342,16 +409,28 @@ async function runDecode() {
       im.src = `data:${mime};base64,${base64}`
     })
     const canvas = document.createElement('canvas')
-    canvas.width = img.naturalWidth
-    canvas.height = img.naturalHeight
+    // 前处理：小图放大 + 灰度，jsQR 对分辨率低/彩色干扰的图识别率差，这两步能明显提升成功率
+    const upscale = img.naturalWidth < 400 ? 3 : 1
+    canvas.width = img.naturalWidth * upscale
+    canvas.height = img.naturalHeight * upscale
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('无法创建画布')
-    ctx.drawImage(img, 0, 0)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const px = data.data
+    for (let i = 0; i < px.length; i += 4) {
+      // 加权灰度（人眼感知），再保留为 RGB 三通道
+      const g = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0
+      px[i] = px[i + 1] = px[i + 2] = g
+    }
     const jsQR = (await import('jsqr')).default
-    const res = jsQR(data.data, data.width, data.height, { inversionAttempts: 'attemptBoth' })
-    if (res?.data) decResult.value = res.data
-    else decError.value = '没有识别到二维码，尝试裁剪或放大图片后重试'
+    const res = jsQR(px, data.width, data.height, { inversionAttempts: 'attemptBoth' })
+    if (res?.data) {
+      decResult.value = res.data
+    } else {
+      decError.value =
+        '没有识别到二维码。建议：换用更清晰的图 / 用手机原图 / 截图时把二维码放大；严重模糊、倾斜或一张图里含多个码时可能无法识别。'
+    }
   } catch (e) {
     decError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -369,6 +448,7 @@ const pinField = ref('')
 const pinTone = ref<'symbol' | 'none' | 'num'>('none')
 const pinMode = ref<'full' | 'initial'>('full')
 const pinOutDir = ref('')
+const pinOutName = ref('')
 const pinBusy = ref(false)
 const pinOutput = ref('')
 
@@ -404,21 +484,26 @@ async function runPinyin() {
   pinBusy.value = true
   try {
     const { pinyin } = await import('pinyin-pro')
-    const lines = [`${pinField.value},拼音`]
+    // 保留原表全部列，末尾追加「拼音」列——不再只导出两列导致原数据丢失
+    const headers = [...pinFields.value, '拼音']
+    const lines: string[][] = []
+    const esc = (v: string): string => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
     for (const rec of pinRecords.value) {
       const name = (rec[pinField.value] ?? '').trim()
-      if (!name) continue
-      const py = pinyin(name, { toneType: pinTone.value, type: 'array' })
-        .map(s => (pinMode.value === 'initial' ? (s[0] ?? '').toUpperCase() : s))
-        .join(pinMode.value === 'initial' ? '' : ' ')
-      lines.push(`${name.replace(/,/g, '，')},${py}`)
+      const py = name
+        ? pinyin(name, { toneType: pinTone.value, type: 'array' })
+            .map(s => (pinMode.value === 'initial' ? (s[0] ?? '').toUpperCase() : s))
+            .join(pinMode.value === 'initial' ? '' : ' ')
+        : ''
+      lines.push(pinFields.value.map(h => rec[h] ?? '').concat(py))
     }
-    const csv = '\uFEFF' + lines.join('\r\n')
+    const csv = '\uFEFF' + [headers, ...lines].map(r => r.map(esc).join(',')).join('\r\n')
     const b64 = bytesToBase64(new TextEncoder().encode(csv))
-    const rr = await api.writeBinary({ dir: pinOutDir.value, name: '名单_带拼音.csv', base64: b64 })
+    const fileName = (pinOutName.value.trim() || '名单_带拼音') + '.csv'
+    const rr = await api.writeBinary({ dir: pinOutDir.value, name: fileName, base64: b64 })
     if (!rr.ok) throw new Error(rr.error)
     pinOutput.value = rr.data.path
-    ElMessage.success(`已生成 ${lines.length - 1} 条`)
+    ElMessage.success(`已生成 ${lines.length} 行（保留原表全部列）`)
   } finally {
     pinBusy.value = false
   }
@@ -430,6 +515,20 @@ const TEXT_FILTER = [{ name: '文本文件', extensions: ['txt', 'md', 'csv', 'l
 const diffA = ref('')
 const diffB = ref('')
 const diffResult = ref<DiffResult | null>(null)
+
+/* 记住页签与各小工具的结构性选项（数量、尺寸、算法、提取类型等） */
+useRemembered('tools', 'tab', tab)
+useRemembered('tools', 'codecKind', codecKind)
+useRemembered('tools', 'uuidCount', uuidCount)
+useRemembered('tools', 'hashAlgo', hashAlgo)
+useRemembered('tools', 'qrSize', qrSize)
+useRemembered('tools', 'qrMargin', qrMargin)
+useRemembered('tools', 'qrEcc', qrEcc)
+useRemembered('tools', 'extractKinds', extractKinds)
+useRemembered('tools', 'extractDedupe', extractDedupe)
+useRemembered('tools', 'extractEncoding', extractEncoding)
+useRemembered('tools', 'pinTone', pinTone)
+useRemembered('tools', 'pinMode', pinMode)
 
 function runDiff() {
   diffResult.value = diffLines(diffA.value, diffB.value)
@@ -476,7 +575,7 @@ async function loadDiffFile(side: 'a' | 'b') {
 <template>
   <div>
     <h1 class="page-title">常用小工具</h1>
-    <p class="page-desc">JSON、编解码、时间戳、UUID、文件哈希、二维码、文本对比，全部本地计算。</p>
+    <p class="page-desc">JSON、编解码、时间戳、UUID、文件哈希、二维码、文本对比，全部本机完成，文件不联网。</p>
 
     <el-tabs v-model="tab">
       <el-tab-pane label="JSON" name="json" />
@@ -484,10 +583,10 @@ async function loadDiffFile(side: 'a' | 'b') {
       <el-tab-pane label="时间戳" name="timestamp" />
       <el-tab-pane label="UUID" name="uuid" />
       <el-tab-pane label="文件哈希" name="hash" />
-      <el-tab-pane label="二维码" name="qrcode" />
-      <el-tab-pane label="批量提取" name="extract" />
+      <el-tab-pane label="二维码生成" name="qrcode" />
       <el-tab-pane label="批量二维码" name="batchqr" />
-      <el-tab-pane label="识别二维码" name="qrdecode" />
+      <el-tab-pane label="二维码识别" name="qrdecode" />
+      <el-tab-pane label="提取联系方式" name="extract" />
       <el-tab-pane label="名单加拼音" name="pinyin" />
       <el-tab-pane label="文本对比" name="diff" />
     </el-tabs>
@@ -501,8 +600,8 @@ async function loadDiffFile(side: 'a' | 'b') {
         placeholder='粘贴 JSON，如 {"姓名":"张三","年龄":20}'
         class="mono"
       />
-      <div class="form-row" style="margin-top: 8px">
-        <el-button type="primary" @click="formatJson(false)">格式化</el-button>
+      <div class="form-row mt-8">
+        <el-button data-primary-action type="primary" @click="formatJson(false)">格式化</el-button>
         <el-button @click="formatJson(true)">压缩</el-button>
         <el-button :icon="CopyDocument" @click="copy(jsonOutput)">复制结果</el-button>
         <span v-if="jsonError" style="color: #f56c6c; font-size: 12px">{{ jsonError }}</span>
@@ -513,8 +612,7 @@ async function loadDiffFile(side: 'a' | 'b') {
         type="textarea"
         :rows="8"
         readonly
-        class="mono"
-        style="margin-top: 8px"
+        class="mono mt-8"
       />
     </div>
 
@@ -531,10 +629,9 @@ async function loadDiffFile(side: 'a' | 'b') {
         type="textarea"
         :rows="4"
         placeholder="输入内容"
-        class="mono"
-        style="margin-top: 8px"
+        class="mono mt-8"
       />
-      <div class="form-row" style="margin-top: 8px">
+      <div class="form-row mt-8">
         <el-button type="primary" @click="runCodec(false)">编码 →</el-button>
         <el-button type="primary" plain @click="runCodec(true)">← 解码</el-button>
         <el-button :icon="CopyDocument" @click="copy(codecOutput)">复制结果</el-button>
@@ -546,8 +643,7 @@ async function loadDiffFile(side: 'a' | 'b') {
         type="textarea"
         :rows="4"
         readonly
-        class="mono"
-        style="margin-top: 8px"
+        class="mono mt-8"
       />
     </div>
 
@@ -561,14 +657,14 @@ async function loadDiffFile(side: 'a' | 'b') {
         <el-button size="small" @click="refreshNow">刷新</el-button>
         <el-button :icon="CopyDocument" @click="copy(String(Date.now()))">复制当前毫秒时间戳</el-button>
       </div>
-      <div class="form-row" style="margin-top: 14px">
+      <div class="form-row mt-14">
         <div class="form-item">
           <label>时间戳 → 日期</label>
           <el-input v-model="tsInput" placeholder="秒或毫秒都支持" style="width: 220px" clearable @input="tsToDateFn" />
         </div>
         <span class="mono" style="color: #409eff">{{ tsToDate }}</span>
       </div>
-      <div class="form-row" style="margin-top: 12px">
+      <div class="form-row mt-12">
         <div class="form-item">
           <label>日期 → 时间戳</label>
           <el-date-picker v-model="dateValue" type="datetime" placeholder="选择日期时间" @change="onDateChange" />
@@ -580,13 +676,22 @@ async function loadDiffFile(side: 'a' | 'b') {
 
     <!-- UUID -->
     <div v-else-if="tab === 'uuid'" class="step-card">
-      <el-button type="primary" @click="genUuid">生成 5 个 UUID</el-button>
-      <el-button :icon="CopyDocument" :disabled="!uuidText" @click="copy(uuidText)">复制全部</el-button>
+      <div class="form-row">
+        <div class="form-item">
+          <label>生成数量</label>
+          <el-input-number v-model="uuidCount" :min="1" :max="1000" size="small" />
+        </div>
+        <el-button data-primary-action type="primary" @click="genUuid">生成 UUID</el-button>
+        <el-button :icon="CopyDocument" :disabled="!uuidText" @click="copy(uuidText)">复制全部</el-button>
+      </div>
       <pre v-if="uuidText" class="mono" style="margin-top: 10px; line-height: 1.9">{{ uuidText }}</pre>
     </div>
 
     <!-- 文件哈希 -->
     <div v-else-if="tab === 'hash'" class="step-card">
+      <p class="page-desc" style="margin-bottom: 10px">
+        哈希值相当于文件的「指纹」：内容哪怕改一个字，指纹就完全不同。常用于核对收到的文件是否被篡改、是否与对方提供的一致。
+      </p>
       <div class="form-row">
         <div class="form-item" style="flex: 1">
           <FilePickList v-model="hashFiles" button-text="选择文件" title="选择要计算哈希的文件" />
@@ -598,14 +703,34 @@ async function loadDiffFile(side: 'a' | 'b') {
             <el-option label="SHA-256" value="sha256" />
           </el-select>
         </div>
-        <el-button type="primary" :loading="hashing" @click="calcHash">计算</el-button>
+        <el-button data-primary-action type="primary" :loading="hashing" @click="calcHash">计算</el-button>
       </div>
-      <el-table v-if="hashResults.length" :data="hashResults" size="small" max-height="300" style="margin-top: 10px">
+      <div class="form-row mt-10">
+        <div class="form-item" style="flex: 1">
+          <label>与预期哈希比对（可选）</label>
+          <el-input v-model="expectedHash" placeholder="粘贴对方提供的哈希值，逐条核对" clearable />
+        </div>
+      </div>
+      <el-alert
+        v-if="expectedHash.trim() && hashResults.length"
+        :type="hashMatchedCount > 0 ? 'success' : 'error'"
+        :closable="false"
+        class="mt-8"
+        :title="hashMatchedCount > 0 ? `有 ${hashMatchedCount} 个文件与预期值一致 ✓` : '没有任何文件与预期值一致 ✗'"
+      />
+      <el-table v-if="hashResults.length" :data="hashResults" size="small" max-height="300" class="mt-10">
         <el-table-column label="文件" width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ hashName(row.path) }}</template>
         </el-table-column>
         <el-table-column label="哈希值" show-overflow-tooltip>
           <template #default="{ row }"><span class="mono">{{ row.hash }}</span></template>
+        </el-table-column>
+        <el-table-column v-if="expectedHash.trim()" label="核对" width="70">
+          <template #default="{ row }">
+            <el-tag :type="hashMatchMap.get(row.path) ? 'success' : 'danger'" size="small">
+              {{ hashMatchMap.get(row.path) ? '一致' : '不符' }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="" width="60">
           <template #default="{ row }">
@@ -624,15 +749,35 @@ async function loadDiffFile(side: 'a' | 'b') {
         placeholder="输入文字或链接，如 https://example.com"
         style="max-width: 560px"
       />
-      <div class="form-row" style="margin-top: 8px">
-        <el-button type="primary" @click="genQr">生成二维码</el-button>
+      <div class="form-row mt-8">
+        <div class="form-item">
+          <label>尺寸(px)</label>
+          <el-input-number v-model="qrSize" :min="64" :max="2048" :step="32" size="small" />
+        </div>
+        <div class="form-item">
+          <label>边距</label>
+          <el-input-number v-model="qrMargin" :min="0" :max="10" size="small" />
+        </div>
+        <div class="form-item">
+          <label>纠错级别</label>
+          <el-select v-model="qrEcc" style="width: 120px" size="small">
+            <el-option label="L 低（容量大）" value="L" />
+            <el-option label="M 中" value="M" />
+            <el-option label="Q 高" value="Q" />
+            <el-option label="H 最高（可加 Logo）" value="H" />
+          </el-select>
+        </div>
+        <el-button data-primary-action type="primary" @click="genQr">生成二维码</el-button>
         <span v-if="qrError" style="color: #f56c6c; font-size: 12px">{{ qrError }}</span>
       </div>
-      <div v-if="qrDataUrl" class="form-row" style="margin-top: 12px">
+      <div v-if="qrDataUrl" class="form-row mt-12">
         <img :src="qrDataUrl" alt="二维码" style="width: 180px; height: 180px" />
         <div>
           <OutDirPicker v-model="qrOutDir" title="选择二维码保存位置" />
-          <el-button type="primary" plain :loading="qrSaving" style="margin-top: 8px" @click="saveQr">
+          <div class="mt-8">
+            <el-input v-model="qrName" placeholder="文件名（留空自动）" style="width: 260px" clearable />
+          </div>
+          <el-button type="primary" plain :loading="qrSaving" class="mt-8" @click="saveQr">
             保存 PNG
           </el-button>
         </div>
@@ -647,11 +792,14 @@ async function loadDiffFile(side: 'a' | 'b') {
             v-model="extractFiles"
             :filters="DOC_FILTER"
             button-text="选择文件"
-            title="选择要提取的文件（txt / csv / xlsx / docx，可多选）"
+            title="选择要提取的文件（txt / csv / xlsx / docx / pdf，可多选）"
           />
+          <div class="page-desc mt-6">
+            PDF 仅能提取文本层内容；扫描件（无文本层）会明确提示，需先做 OCR。
+          </div>
         </div>
       </div>
-      <div class="form-row" style="margin-top: 12px">
+      <div class="form-row mt-12">
         <div class="form-item">
           <label>要提取的内容</label>
           <el-checkbox-group v-model="extractKinds">
@@ -664,24 +812,45 @@ async function loadDiffFile(side: 'a' | 'b') {
           <el-checkbox v-model="extractDedupe">去重</el-checkbox>
         </div>
       </div>
-      <div class="form-row" style="margin-top: 12px">
+      <div class="form-row mt-12">
         <OutDirPicker v-model="extractOutDir" title="选择输出文件夹" />
       </div>
-      <div class="form-row" style="margin-top: 12px">
-        <el-button type="primary" :loading="extractBusy" @click="runExtract">开始提取</el-button>
+      <div class="form-row mt-12">
+        <div class="form-item">
+          <label>文件名前缀</label>
+          <el-input v-model="extractName" placeholder="留空自动：手机号_N个.txt" style="width: 260px" clearable />
+        </div>
+        <div class="form-item">
+          <label>输出编码</label>
+          <el-radio-group v-model="extractEncoding">
+            <el-radio-button value="utf8">UTF-8</el-radio-button>
+            <el-radio-button value="gbk">GBK（旧版 Excel/记事本）</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="page-desc" style="align-self: center">每类一个 txt，命名为「前缀_手机号.txt」等</div>
+      </div>
+      <div class="form-row mt-12">
+        <el-button data-primary-action type="primary" :loading="extractBusy" @click="runExtract">开始提取</el-button>
       </div>
       <template v-if="extractResult">
         <el-alert
           type="success"
           :closable="false"
-          style="margin-top: 12px"
+          class="mt-12"
           :title="extractResult.counts.map(c => `${c.label} ${c.count} 个`).join('，')"
         />
-        <ul class="file-list" style="margin-top: 8px">
-          <li v-for="p in extractResult.outputs" :key="p">
-            <span class="file-name">{{ basename(p) }}</span>
-          </li>
-        </ul>
+        <el-alert
+          v-if="extractResult.failed && extractResult.failed.length"
+          type="warning"
+          :closable="false"
+          class="mt-8"
+          :title="`${extractResult.failed.length} 个文件未能提取已跳过`"
+        >
+          <div v-for="(f, i) in extractResult.failed" :key="i" style="font-size: 12px; line-height: 1.6">
+            {{ f.name }}：{{ f.reason }}
+          </div>
+        </el-alert>
+        <ResultPanel :outputs="extractResult.outputs" />
       </template>
     </div>
 
@@ -699,7 +868,7 @@ async function loadDiffFile(side: 'a' | 'b') {
         </div>
         <el-button plain @click="loadQrRecords">读取数据</el-button>
       </div>
-      <div v-if="qrRecords.length" class="form-row" style="margin-top: 12px">
+      <div v-if="qrRecords.length" class="form-row mt-12">
         <div class="form-item">
           <label>二维码内容列</label>
           <el-select v-model="qrField" placeholder="选择列" style="width: 200px">
@@ -721,11 +890,11 @@ async function loadDiffFile(side: 'a' | 'b') {
           </el-select>
         </div>
       </div>
-      <div class="form-row" style="margin-top: 12px">
+      <div class="form-row mt-12">
         <OutDirPicker v-model="batchQrOutDir" title="选择保存文件夹" />
       </div>
-      <div class="form-row" style="margin-top: 12px">
-        <el-button type="primary" :loading="batchQrBusy" :disabled="!qrRecords.length" @click="runBatchQr">
+      <div class="form-row mt-12">
+        <el-button data-primary-action type="primary" :loading="batchQrBusy" :disabled="!qrRecords.length" @click="runBatchQr">
           生成全部二维码（{{ qrRecords.length }} 行）
         </el-button>
       </div>
@@ -753,11 +922,11 @@ async function loadDiffFile(side: 'a' | 'b') {
           />
         </div>
       </div>
-      <div class="form-row" style="margin-top: 8px">
-        <el-button type="primary" :loading="decBusy" @click="runDecode">识别</el-button>
+      <div class="form-row mt-8">
+        <el-button data-primary-action type="primary" :loading="decBusy" @click="runDecode">识别</el-button>
       </div>
-      <el-input v-if="decResult" :model-value="decResult" type="textarea" :rows="3" readonly class="mono" style="margin-top: 10px" />
-      <div v-if="decResult" class="form-row" style="margin-top: 8px">
+      <el-input v-if="decResult" :model-value="decResult" type="textarea" :rows="3" readonly class="mono mt-10" />
+      <div v-if="decResult" class="form-row mt-8">
         <el-button :icon="CopyDocument" @click="copy(decResult)">复制内容</el-button>
         <el-button v-if="decIsUrl" type="primary" plain @click="openUrl(decResult)">在浏览器打开</el-button>
       </div>
@@ -771,14 +940,14 @@ async function loadDiffFile(side: 'a' | 'b') {
           <FilePickList
             v-model="pinFiles"
             :multiple="false"
-            :filters="[{ name: '数据文件', extensions: ['xlsx', 'json'] }]"
+            :filters="[{ name: '数据文件', extensions: ['xlsx', 'csv', 'json'] }]"
             button-text="选择名单文件"
-            title="选择名单（xlsx 第 1 行表头或 json 数组）"
+            title="选择名单（xlsx/csv 首行表头，或 json 数组）"
           />
         </div>
         <el-button plain @click="loadPinRecords">读取</el-button>
       </div>
-      <div v-if="pinRecords.length" class="form-row" style="margin-top: 12px">
+      <div v-if="pinRecords.length" class="form-row mt-12">
         <div class="form-item">
           <label>姓名列</label>
           <el-select v-model="pinField" placeholder="选择列" style="width: 160px">
@@ -801,13 +970,22 @@ async function loadDiffFile(side: 'a' | 'b') {
           </el-radio-group>
         </div>
       </div>
-      <div class="form-row" style="margin-top: 12px">
+      <div class="page-desc mt-8">
+        输出会保留原表全部列，并在末尾追加一列「拼音」。
+      </div>
+      <div class="form-row mt-12">
         <OutDirPicker v-model="pinOutDir" title="选择输出文件夹" />
       </div>
-      <div class="form-row" style="margin-top: 12px">
-        <el-button type="primary" :loading="pinBusy" :disabled="!pinRecords.length" @click="runPinyin">生成拼音列 CSV</el-button>
+      <div class="form-row mt-10">
+        <div class="form-item">
+          <label>输出文件名</label>
+          <el-input v-model="pinOutName" placeholder="留空：名单_带拼音" style="width: 240px" clearable />
+        </div>
       </div>
-      <div v-if="pinOutput" class="file-list" style="margin-top: 8px">
+      <div class="form-row mt-12">
+        <el-button data-primary-action type="primary" :loading="pinBusy" :disabled="!pinRecords.length" @click="runPinyin">生成拼音列 CSV</el-button>
+      </div>
+      <div v-if="pinOutput" class="file-list mt-8">
         <span class="file-name">{{ basename(pinOutput) }}</span>
         <el-button size="small" link type="primary" @click="openPinDir">打开文件夹</el-button>
       </div>
@@ -831,8 +1009,8 @@ async function loadDiffFile(side: 'a' | 'b') {
           <el-input v-model="diffB" type="textarea" :rows="10" placeholder="粘贴修改后的文本…" />
         </div>
       </div>
-      <div class="form-row" style="margin-top: 12px">
-        <el-button type="primary" @click="runDiff">对比</el-button>
+      <div class="form-row mt-12">
+        <el-button data-primary-action type="primary" @click="runDiff">对比</el-button>
         <el-button plain @click="swapDiff">交换</el-button>
         <el-button plain @click="clearDiff">清空</el-button>
       </div>

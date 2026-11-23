@@ -1,15 +1,26 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import ResultPanel from '../components/ResultPanel.vue'
 import { callQ } from '../utils/api'
+import { useEnterSubmit } from '../utils/useEnterSubmit'
+import { useReadyGate } from '../utils/useReadyGate'
 import type { ReplaceTextResult } from '@shared/types'
 
-const OFFICE_FILTER = [{ name: 'Word / Excel 文档', extensions: ['docx', 'xlsx'] }]
+/** 填完参数按 Enter 直接执行（主按钮已标 data-primary-action） */
+useEnterSubmit()
+
+/** 文档与查找词都齐了才能替换；留空的替换词是合法的（等于删除） */
+const { blocked: runBlocked, reason: runBlockedReason } = useReadyGate(() => [
+  { label: '待替换文档', ok: files.value.length > 0 },
+  { label: '查找文字', ok: !!findText.value.trim() }
+])
+
+const OFFICE_FILTER = [{ name: 'Word / Excel 文档', extensions: ['docx', 'xlsx', 'doc'] }]
 
 const files = ref<string[]>([])
 const findText = ref('')
@@ -17,6 +28,10 @@ const replaceWith = ref('')
 const outDir = ref('')
 const result = ref<ReplaceTextResult | null>(null)
 const running = ref(false)
+
+const totalSplitMiss = computed(() =>
+  (result.value?.counts ?? []).reduce((n, c) => n + (c.splitMisses ?? 0), 0)
+)
 
 async function run() {
   result.value = null
@@ -80,27 +95,49 @@ async function run() {
           <el-input v-model="replaceWith" placeholder="如：2026年" style="width: 260px" clearable />
         </div>
       </div>
-      <div class="page-desc" style="margin-top: 8px">
-        Word 正文、页眉页脚与 Excel 所有单元格都会处理；被排版拆开的词可能匹配不到，替换后请抽查。
+      <div class="page-desc mt-8">
+        Word 正文、页眉页脚与 Excel 所有单元格都会处理，被排版拆开的词会自动跨片段匹配；替换后仍建议抽查。
       </div>
     </StepCard>
 
-    <StepCard :step="3" title="输出位置">
+    <!-- 输出位置与执行合并：执行区只有一个按钮，单独占卡会白吃一块高度 -->
+    <StepCard :step="3" title="输出位置与执行">
       <OutDirPicker v-model="outDir" />
-    </StepCard>
-
-    <StepCard :step="4" title="执行">
-      <el-button type="primary" :loading="running" @click="run">开始替换</el-button>
+      <div class="run-row">
+        <el-button
+          type="primary"
+          :loading="running"
+          :disabled="runBlocked"
+          :title="runBlockedReason"
+          :data-blocked-reason="runBlockedReason"
+          data-primary-action
+          @click="run"
+        >
+          开始替换
+        </el-button>
+      </div>
       <ResultPanel v-if="result" :outputs="result.outputs" />
+      <el-alert
+        v-if="totalSplitMiss"
+        type="warning"
+        :closable="false"
+        class="mt-12"
+        :title="`有 ${totalSplitMiss} 处疑似因排版拆开而未能替换，请打开文件复核`"
+      />
       <el-table
         v-if="result"
         :data="result.counts"
         size="small"
         max-height="260"
-        style="margin-top: 12px"
+        class="mt-12"
       >
         <el-table-column prop="name" label="文件" show-overflow-tooltip />
         <el-table-column prop="count" label="替换次数" width="110" />
+        <el-table-column label="疑似漏替换" width="110">
+          <template #default="{ row }">
+            <span :style="row.splitMisses ? 'color:#e6a23c' : ''">{{ row.splitMisses || 0 }}</span>
+          </template>
+        </el-table-column>
       </el-table>
     </StepCard>
   </div>

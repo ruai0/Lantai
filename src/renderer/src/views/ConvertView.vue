@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import FilePickList from '../components/FilePickList.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import { callQ, basename } from '../utils/api'
-import type { OfficeToPdfResult } from '@shared/types'
+import { useEnterSubmit } from '../utils/useEnterSubmit'
+import { useShellFiles } from '../utils/shellIntent'
+import type { EnvProbe, OfficeToPdfResult } from '@shared/types'
+
+/** 填完参数按 Enter 直接执行（主按钮已标 data-primary-action） */
+useEnterSubmit()
 
 const OFFICE_FILTER = [
   {
@@ -16,9 +22,74 @@ const OFFICE_FILTER = [
 ]
 
 const files = ref<string[]>([])
+const { take } = useShellFiles()
 const outDir = ref('')
 const result = ref<OfficeToPdfResult | null>(null)
 const running = ref(false)
+const router = useRouter()
+
+/* 环境探测：未装 Office/WPS 时该功能必定失败，提前告知而不是等到转换中途报错 */
+const probe = ref<EnvProbe | null>(null)
+const probing = ref(false)
+
+async function refreshProbe(force = false) {
+  probing.value = true
+  try {
+    const r = await api.probe({ force })
+    if (r.ok) probe.value = r.data
+  } finally {
+    probing.value = false
+  }
+}
+onMounted(() => {
+  void refreshProbe()
+  // 从资源管理器右键「转换为 PDF」进来的文件，直接填好待转列表
+  const incoming = take()
+  if (incoming.length) files.value = incoming
+})
+
+/** 按所选文件的类型判断是否有对应的转换组件；未选文件时判断是否三者都缺 */
+const requiredKinds = computed<Array<'word' | 'excel' | 'ppt'>>(() => {
+  const kinds = new Set<'word' | 'excel' | 'ppt'>()
+  for (const f of files.value) {
+    const ext = f.split('.').pop()?.toLowerCase() ?? ''
+    if (ext === 'doc' || ext === 'docx') kinds.add('word')
+    else if (ext === 'xls' || ext === 'xlsx') kinds.add('excel')
+    else if (ext === 'ppt' || ext === 'pptx') kinds.add('ppt')
+  }
+  return [...kinds]
+})
+
+const missingLabel = computed(() => {
+  if (!probe.value) return ''
+  const map: Record<string, string> = { word: 'Word', excel: 'Excel', ppt: 'PowerPoint' }
+  const kinds = requiredKinds.value.length ? requiredKinds.value : (['word', 'excel', 'ppt'] as const)
+  const missing = kinds.filter(k => /未检测到/.test(probe.value![k]))
+  if (!missing.length) return ''
+  return missing.map(k => map[k]).join(' / ')
+})
+
+/** 环境层面：未选文件时只要三者全缺才拦截；选了文件后只要缺对应组件就拦截 */
+const envBlocked = computed(() => {
+  if (!probe.value) return false
+  if (requiredKinds.value.length === 0) {
+    return ['word', 'excel', 'ppt'].every(k => /未检测到/.test(probe.value![k as 'word']))
+  }
+  return !!missingLabel.value
+})
+
+/**
+ * 主按钮是否可点：环境缺失或没选文件都拦住。
+ * 环境问题已经有上方红框详细说明，不再重复写进 title；
+ * 没选文件这种"缺什么"则由 gate 统一给出提示。
+ */
+const noFiles = computed(() => files.value.length === 0)
+const blocked = computed(() => envBlocked.value || noFiles.value)
+const blockedReason = computed(() => (envBlocked.value || !noFiles.value ? '' : '还需：待转换文件'))
+
+function goSettings() {
+  void router.push('/settings')
+}
 
 async function run() {
   result.value = null
@@ -53,6 +124,35 @@ async function openOut() {
       WPS 完成，全程离线；转换过程中请不要打开相关文档。
     </p>
 
+    <el-alert
+      v-if="blocked"
+      type="error"
+      :closable="false"
+      style="margin-bottom: 16px"
+      show-icon
+      :title="`本机未检测到可用的 ${missingLabel}，无法完成转换`"
+    >
+      <template #default>
+        <div class="mt-6">
+          请先安装 Microsoft Office 或 WPS，然后点击「重新探测」。
+          <el-button size="small" type="primary" link @click="goSettings">去设置页查看环境详情</el-button>
+          <el-button size="small" link :loading="probing" @click="refreshProbe(true)">重新探测</el-button>
+        </div>
+      </template>
+    </el-alert>
+    <el-alert
+      v-else-if="probe && missingLabel"
+      type="warning"
+      :closable="false"
+      style="margin-bottom: 16px"
+      show-icon
+      :title="`所选文件类型需要的 ${missingLabel} 未检测到，这些文件可能转换失败`"
+    >
+      <template #default>
+        <el-button size="small" type="primary" link @click="goSettings">去设置页查看环境详情</el-button>
+      </template>
+    </el-alert>
+
     <StepCard :step="1" title="选择文档">
       <FilePickList
         v-model="files"
@@ -62,12 +162,22 @@ async function openOut() {
       />
     </StepCard>
 
-    <StepCard :step="2" title="输出位置">
+    <!-- 输出位置与执行合并：执行区只有一个按钮，单独占卡会白吃一块高度 -->
+    <StepCard :step="2" title="输出位置与执行">
       <OutDirPicker v-model="outDir" />
-    </StepCard>
-
-    <StepCard :step="3" title="执行">
-      <el-button type="primary" :loading="running" @click="run">开始转换</el-button>
+      <div class="run-row">
+        <el-button
+          type="primary"
+          :loading="running"
+          :disabled="blocked"
+          :title="blockedReason"
+          :data-blocked-reason="blockedReason"
+          data-primary-action
+          @click="run"
+        >
+          开始转换
+        </el-button>
+      </div>
       <el-result
         v-if="result && result.outputs.length"
         icon="success"

@@ -111,7 +111,7 @@ function onKey(e: KeyboardEvent) {
           <!-- 日志 -->
           <template v-if="tab === 'log'">
             <pre class="dbg-pre">{{ dev?.logTail ?? '(未加载)' }}</pre>
-            <div class="dbg-btns" style="margin-top: 10px">
+            <div class="dbg-btns mt-10">
               <el-button size="small" plain @click="api.openPath(`${dev?.userData ?? ''}/logs`)">打开日志目录</el-button>
               <el-button size="small" plain @click="copyAll">复制诊断信息</el-button>
             </div>
@@ -123,7 +123,7 @@ function onKey(e: KeyboardEvent) {
             <pre class="dbg-pre dbg-pre--short">{{ dev.settingsRaw }}</pre>
             <div class="dbg-sec">history.json（{{ dev.historyCount }} 条，前 6000 字符）</div>
             <pre class="dbg-pre dbg-pre--short">{{ dev.historyRaw }}</pre>
-            <div class="dbg-btns" style="margin-top: 10px">
+            <div class="dbg-btns mt-10">
               <el-button size="small" plain @click="api.openUserData()">打开数据目录</el-button>
             </div>
           </template>

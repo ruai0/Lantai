@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../utils/ipc'
 import { call } from '../utils/api'
 import {
@@ -8,29 +8,52 @@ import {
   defaultStampSize,
   fitScale,
   hitResizeHandle,
-  hitStamp,
   normalizeRect,
   pixelGrid,
   type Rect
 } from '../utils/imageEdit'
 
 /**
- * 单张图片的交互式标注画布：马赛克打码、涂抹遮挡、贴图盖章、框选复制、裁剪。
+ * 单张图片的交互式标注画布：马赛克打码、涂抹遮挡、贴图盖章、文字标注、形状标注（矩形/椭圆/直线/箭头）、
+ * 滤镜调色（亮度/对比度/灰度/反色）、框选复制、裁剪。
  * 全分辨率状态放在非响应式的离屏 canvas（work）上，viewRef 只做按 scale 的可视化渲染；
  * HTMLImageElement 不放进深响应式（Proxy 会丢失内部插槽导致 drawImage 失败），一律 shallowRef。
  */
-interface StampItem {
+
+interface BaseAnno {
   id: number
-  img: CanvasImageSource
-  name: string
   x: number
   y: number
   w: number
   h: number
   opacity: number
 }
+interface StampAnno extends BaseAnno {
+  kind: 'stamp'
+  img: CanvasImageSource
+  name: string
+}
+interface TextAnno extends BaseAnno {
+  kind: 'text'
+  text: string
+  fontSize: number
+  color: string
+  stroke: boolean
+  shadow: boolean
+}
+interface ShapeAnno extends BaseAnno {
+  kind: 'shape'
+  shape: 'rect' | 'ellipse' | 'line' | 'arrow'
+  color: string
+  lineWidth: number
+}
+type AnnoItem = StampAnno | TextAnno | ShapeAnno
 
-type Tool = 'mosaic' | 'cover' | 'stamp' | 'select' | 'crop'
+type ShapeKind = 'rect' | 'ellipse' | 'line' | 'arrow'
+const SHAPE_KINDS: ShapeKind[] = ['rect', 'ellipse', 'line', 'arrow']
+const isShapeTool = (t: string) => SHAPE_KINDS.includes(t as ShapeKind)
+
+type Tool = 'mosaic' | 'cover' | 'stamp' | 'text' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'select' | 'crop'
 
 const props = defineProps<{ image: { name: string; mime: string; base64: string } | null }>()
 
@@ -43,18 +66,38 @@ const tool = ref<Tool>('mosaic')
 const scale = ref(1)
 const fitMode = ref(true)
 const isFull = ref(false)
+/** 画布衬底背景，默认柔和灰棋盘格，避免透明 PNG 在明暗主题下闪成刺眼的纯白/纯黑 */
+const bgMode = ref<'checker' | 'white' | 'gray' | 'black'>('checker')
 
 const mosaicCell = ref(14)
 const brushColor = ref('#000000')
 const brushSize = ref(28)
 const stampSrc = shallowRef<{ name: string; img: HTMLImageElement; sw: number; sh: number } | null>(null)
 const stampOpacity = ref(100)
-const stamps = shallowRef<StampItem[]>([])
+const stamps = shallowRef<AnnoItem[]>([])
 const selId = ref<number | null>(null)
 const cropRect = ref<Rect | null>(null)
 const selRect = ref<Rect | null>(null)
 const clip = shallowRef<HTMLCanvasElement | null>(null)
 const historyLen = ref(0)
+
+/* 文字标注参数 */
+const textSize = ref(32)
+const textColor = ref('#ffffff')
+const textStroke = ref(true)
+const textShadow = ref(false)
+
+/* 形状标注参数 */
+const shapeColor = ref('#f56c6c')
+const shapeWidth = ref(4)
+
+/* 滤镜调色 */
+const adjBright = ref(0)
+const adjContrast = ref(0)
+const adjGray = ref(false)
+const adjInvert = ref(false)
+const adjOpen = ref(false)
+let adjBase: HTMLCanvasElement | null = null
 
 let work: HTMLCanvasElement | null = null
 let imgW = 0
@@ -67,6 +110,7 @@ const HANDLE_PX = 7 // 缩放把手命中半径（屏幕像素）
 
 let drag: {
   mode: '' | 'rect' | 'stroke' | 'move' | 'resize'
+  id: number
   sx: number
   sy: number
   cx: number
@@ -75,20 +119,45 @@ let drag: {
   dy: number
   ow: number
   oh: number
-  id: number
+  ofs: number
+  shape: '' | ShapeKind
 } = freshDrag()
 
 function freshDrag() {
-  return { mode: '' as const, sx: 0, sy: 0, cx: 0, cy: 0, dx: 0, dy: 0, ow: 0, oh: 0, id: 0 }
+  return { mode: '' as const, id: 0, sx: 0, sy: 0, cx: 0, cy: 0, dx: 0, dy: 0, ow: 0, oh: 0, ofs: 0, shape: '' as const }
 }
 
-// 透明度滑块对「当前选中贴图」实时生效，未选中时作为下次放置的默认值
+// 透明度滑块对「当前选中标注」实时生效，未选中时作为下次放置的默认值
 watch(stampOpacity, v => {
   const s = stamps.value.find(i => i.id === selId.value)
   if (s) {
     s.opacity = v
     render()
   }
+})
+// 形状颜色/线宽实时作用于选中的形状
+watch([shapeColor, shapeWidth], () => {
+  const s = stamps.value.find(i => i.id === selId.value)
+  if (s && s.kind === 'shape') {
+    s.color = shapeColor.value
+    s.lineWidth = shapeWidth.value
+    render()
+  }
+})
+// 文字样式实时作用于选中的文字
+watch([textColor, textStroke, textShadow], () => {
+  const s = stamps.value.find(i => i.id === selId.value)
+  if (s && s.kind === 'text') {
+    s.color = textColor.value
+    s.stroke = textStroke.value
+    s.shadow = textShadow.value
+    render()
+  }
+})
+
+// 切换工具时取消当前选中，避免对象被"幽灵选中"却看不到选中框
+watch(tool, () => {
+  selId.value = null
 })
 
 const hint = computed(() => {
@@ -101,19 +170,26 @@ const hint = computed(() => {
       return stampSrc.value
         ? '点击放置贴图，可连续盖多个；拖动移位、右下角缩放，选中后调透明度，「落下合并」写入图片。也可 Ctrl+V 粘贴剪贴板图片。'
         : '先点「选择贴图」挑一张图（建议带透明通道的 PNG，如电子章、Logo、截图），或 Ctrl+V 粘贴剪贴板里的图片。'
+    case 'text':
+      return '点击图上任意位置输入文字；拖动移位、右下角缩放（同步改字号），选中后可改样式，双击重新编辑。'
+    case 'rect':
+    case 'ellipse':
+    case 'line':
+    case 'arrow':
+      return '在图上拖出区域生成形状；右下角缩放，选中后调颜色与粗细，「落下合并」写入图片。'
     case 'select':
       return selRect.value
         ? '已框选。Ctrl+C 复制选区（按原尺寸），Ctrl+V 贴出为贴图；复制后在其他软件里也能粘贴。'
         : '拖框圈住图上任意内容（文字、表格、印章），复制后可贴到别处。'
     case 'crop':
       return cropRect.value
-        ? '拖动重新框选，满意后点「应用裁剪」；未落下的贴图会随裁剪一并合并。'
+        ? '拖动重新框选，满意后点「应用裁剪」；未落下的标注会随裁剪一并合并。'
         : '在图上拖出要保留的区域。'
   }
 })
 
 const cursorClass = computed(() =>
-  tool.value === 'cover' || tool.value === 'stamp' ? '' : 'ed-cross'
+  tool.value === 'cover' || tool.value === 'stamp' || tool.value === 'text' || isShapeTool(tool.value) ? '' : 'ed-cross'
 )
 
 /* ---------- 加载与缩放 ---------- */
@@ -235,21 +311,75 @@ function undo() {
   render()
 }
 
-function mergeStamps(target: HTMLCanvasElement, list: StampItem[]) {
+function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, lw: number) {
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  const ang = Math.atan2(y2 - y1, x2 - x1)
+  const head = Math.max(8, lw * 3.5)
+  ctx.beginPath()
+  ctx.moveTo(x2, y2)
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 7), y2 - head * Math.sin(ang - Math.PI / 7))
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 7), y2 - head * Math.sin(ang + Math.PI / 7))
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** 把标注层（图片/文字/形状）合并写入目标画布；ox/oy 为额外偏移（用于导出选区/扩展画布） */
+function mergeAnno(target: HTMLCanvasElement, list: AnnoItem[], ox = 0, oy = 0) {
   const ctx = target.getContext('2d')!
   for (const s of list) {
     ctx.save()
     ctx.globalAlpha = s.opacity / 100
-    ctx.drawImage(s.img, s.x, s.y, s.w, s.h)
+    if (s.kind === 'stamp') {
+      ctx.drawImage(s.img, s.x + ox, s.y + oy, s.w, s.h)
+    } else if (s.kind === 'text') {
+      ctx.font = `${s.fontSize}px "Microsoft YaHei", sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      if (s.shadow) {
+        ctx.shadowColor = 'rgba(0,0,0,0.45)'
+        ctx.shadowBlur = Math.max(2, s.fontSize / 8)
+      }
+      if (s.stroke) {
+        ctx.lineWidth = Math.max(1, s.fontSize / 14)
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = '#000000'
+        ctx.strokeText(s.text, s.x + ox + s.w / 2, s.y + oy + s.h / 2)
+      }
+      ctx.fillStyle = s.color
+      ctx.fillText(s.text, s.x + ox + s.w / 2, s.y + oy + s.h / 2)
+    } else {
+      ctx.strokeStyle = s.color
+      ctx.fillStyle = s.color
+      ctx.lineWidth = Math.max(1, s.lineWidth)
+      const x = s.x + ox
+      const y = s.y + oy
+      if (s.shape === 'rect') {
+        ctx.strokeRect(x, y, s.w, s.h)
+      } else if (s.shape === 'ellipse') {
+        ctx.beginPath()
+        ctx.ellipse(x + s.w / 2, y + s.h / 2, Math.abs(s.w / 2), Math.abs(s.h / 2), 0, 0, Math.PI * 2)
+        ctx.stroke()
+      } else if (s.shape === 'line') {
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + s.w, y + s.h)
+        ctx.stroke()
+      } else {
+        drawArrow(ctx, x, y, x + s.w, y + s.h, Math.max(1, s.lineWidth))
+      }
+    }
     ctx.restore()
   }
 }
 
-/** 落下合并：把未合并的贴图写进工作画布（可撤销） */
+/** 落下合并：把未合并的标注写进工作画布（可撤销） */
 function mergeDown() {
   if (!work || !stamps.value.length) return
   pushHistory()
-  mergeStamps(work, stamps.value)
+  mergeAnno(work, stamps.value)
   stamps.value = []
   selId.value = null
   render()
@@ -270,7 +400,7 @@ function pixelate(r: Rect) {
   ctx.imageSmoothingEnabled = true
 }
 
-/** 拖框取整到图片像素；贴图/复制/裁剪都按整数坐标走，避免亚像素重采样把原图插值糊掉 */
+/** 拖框取整到图片像素；贴图/复制/裁剪/形状都按整数坐标走，避免亚像素重采样把原图插值糊掉 */
 function snapRect(r: Rect): Rect {
   const x = Math.round(r.x)
   const y = Math.round(r.y)
@@ -286,7 +416,7 @@ function applyCrop() {
   }
   pushHistory()
   if (stamps.value.length) {
-    mergeStamps(work, stamps.value)
+    mergeAnno(work, stamps.value)
     stamps.value = []
     selId.value = null
   }
@@ -317,18 +447,67 @@ function placeStamp(
   sh: number,
   name: string,
   natural: boolean
-): StampItem {
+): StampAnno {
   const size = natural
     ? { w: Math.min(sw, imgW), h: Math.min(sh, imgH) }
     : defaultStampSize(imgW, imgH, sw, sh)
-  const item: StampItem = {
+  const item: StampAnno = {
     id: ++stampSeq,
+    kind: 'stamp',
     img: src,
     name,
     x: Math.round(clamp(p.x - size.w / 2, 0, Math.max(0, imgW - size.w))),
     y: Math.round(clamp(p.y - size.h / 2, 0, Math.max(0, imgH - size.h))),
     w: Math.round(size.w),
     h: Math.round(size.h),
+    opacity: stampOpacity.value
+  }
+  stamps.value = [...stamps.value, item]
+  selId.value = item.id
+  return item
+}
+
+function measureTextW(text: string, fontSize: number): number {
+  const c = document.createElement('canvas')
+  const ctx = c.getContext('2d')!
+  ctx.font = `${fontSize}px "Microsoft YaHei", sans-serif`
+  return Math.ceil(ctx.measureText(text).width)
+}
+
+function placeText(p: { x: number; y: number }, text: string): TextAnno {
+  const fs = textSize.value
+  const w = Math.max(40, measureTextW(text, fs))
+  const h = Math.round(fs * 1.4)
+  const item: TextAnno = {
+    id: ++stampSeq,
+    kind: 'text',
+    text,
+    fontSize: fs,
+    color: textColor.value,
+    stroke: textStroke.value,
+    shadow: textShadow.value,
+    x: Math.round(clamp(p.x - w / 2, 0, Math.max(0, imgW - w))),
+    y: Math.round(clamp(p.y - h / 2, 0, Math.max(0, imgH - h))),
+    w,
+    h,
+    opacity: stampOpacity.value
+  }
+  stamps.value = [...stamps.value, item]
+  selId.value = item.id
+  return item
+}
+
+function placeShape(kind: 'rect' | 'ellipse' | 'line' | 'arrow', r: Rect): ShapeAnno {
+  const item: ShapeAnno = {
+    id: ++stampSeq,
+    kind: 'shape',
+    shape: kind,
+    color: shapeColor.value,
+    lineWidth: shapeWidth.value,
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
     opacity: stampOpacity.value
   }
   stamps.value = [...stamps.value, item]
@@ -361,7 +540,7 @@ async function copySelection() {
   ctx.drawImage(work, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height)
   ctx.save()
   ctx.translate(-r.x, -r.y)
-  mergeStamps(c, stamps.value)
+  mergeAnno(c, stamps.value)
   ctx.restore()
   clip.value = c
   // 尽力写入系统剪贴板；失败不影响应用内粘贴
@@ -413,6 +592,40 @@ function cancelSel() {
   render()
 }
 
+/**
+ * 桌面端（Electron / WebView）里 window.prompt 不弹窗且返回 null，
+ * 统一走 Element Plus 的输入框保证可用性；取消返回 null。
+ */
+function promptText(title: string, initial = ''): Promise<string | null> {
+  return ElMessageBox.prompt(title, '文字标注', {
+    inputValue: initial,
+    inputPlaceholder: '输入要写在图上的文字',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  })
+    .then(r => String(r.value ?? ''))
+    .catch(() => null)
+}
+
+async function editSelectedText() {
+  const s = stamps.value.find(i => i.id === selId.value)
+  if (!s || s.kind !== 'text') {
+    ElMessage.info('请先选中一个文字标注')
+    return
+  }
+  const v = await promptText('编辑文字：', s.text)
+  if (v == null) return
+  if (!v.trim()) {
+    stamps.value = stamps.value.filter(i => i.id !== s.id)
+    selId.value = null
+  } else {
+    s.text = v.trim()
+    const w = Math.max(40, measureTextW(s.text, s.fontSize))
+    s.w = w
+  }
+  render()
+}
+
 /* ---------- 指针交互 ---------- */
 
 function toImgPoint(e: PointerEvent): { x: number; y: number } {
@@ -422,6 +635,24 @@ function toImgPoint(e: PointerEvent): { x: number; y: number } {
     x: clamp((e.clientX - r.left) / scale.value, 0, imgW),
     y: clamp((e.clientY - r.top) / scale.value, 0, imgH)
   }
+}
+
+function hitAnno(s: AnnoItem, p: { x: number; y: number }): boolean {
+  if (s.kind === 'shape' && (s.shape === 'line' || s.shape === 'arrow')) {
+    const x1 = s.x
+    const y1 = s.y
+    const x2 = s.x + s.w
+    const y2 = s.y + s.h
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const len2 = dx * dx + dy * dy || 1
+    let t = ((p.x - x1) * dx + (p.y - y1) * dy) / len2
+    t = clamp(t, 0, 1)
+    const cx = x1 + t * dx
+    const cy = y1 + t * dy
+    return Math.hypot(p.x - cx, p.y - cy) <= Math.max(s.lineWidth, 8)
+  }
+  return p.x >= s.x && p.x <= s.x + s.w && p.y >= s.y && p.y <= s.y + s.h
 }
 
 function onDown(e: PointerEvent) {
@@ -438,21 +669,44 @@ function onDown(e: PointerEvent) {
     strokeTo(p, null)
     return
   }
+  if (tool.value === 'text') {
+    // 命中已有文字则选中（双击编辑），不新建；空白处才弹窗输入
+    const hit = [...stamps.value].reverse().find(s => s.kind === 'text' && hitAnno(s, p))
+    if (hit) {
+      selId.value = hit.id
+      drag = { ...freshDrag(), mode: 'move', id: hit.id, dx: p.x - hit.x, dy: p.y - hit.y }
+      render()
+      return
+    }
+    void (async () => {
+      const t = await promptText('输入文字：')
+      if (t && t.trim()) {
+        placeText(p, t.trim())
+        render()
+      }
+    })()
+    return
+  }
   if (tool.value === 'mosaic' || tool.value === 'crop' || tool.value === 'select') {
     drag = { ...freshDrag(), mode: 'rect', sx: p.x, sy: p.y, cx: p.x, cy: p.y }
     return
   }
-  // 贴图：优先缩放把手 > 已有贴图 > 放置新贴图
+  if (isShapeTool(tool.value)) {
+    drag = { ...freshDrag(), mode: 'rect', sx: p.x, sy: p.y, cx: p.x, cy: p.y, shape: tool.value as ShapeKind }
+    return
+  }
+  // 贴图：优先缩放把手 > 已有标注 > 放置新贴图
   const list = stamps.value
   const sel = list.find(s => s.id === selId.value)
   if (sel && hitResizeHandle(sel, p, HANDLE_PX / scale.value)) {
-    drag = { ...freshDrag(), mode: 'resize', id: sel.id, ow: sel.w, oh: sel.h }
+    drag = { ...freshDrag(), mode: 'resize', id: sel.id, ow: sel.w, oh: sel.h, ofs: sel.kind === 'text' ? sel.fontSize : 0 }
     return
   }
-  const hit = [...list].reverse().find(s => hitStamp(s, p))
+  const hit = [...list].reverse().find(s => hitAnno(s, p))
   if (hit) {
     selId.value = hit.id
     drag = { ...freshDrag(), mode: 'move', id: hit.id, dx: p.x - hit.x, dy: p.y - hit.y }
+    render()
     return
   }
   if (!stampSrc.value && !clip.value) {
@@ -491,10 +745,21 @@ function onMove(e: PointerEvent) {
     s.x = Math.round(clamp(p.x - drag.dx, 0, Math.max(0, imgW - s.w)))
     s.y = Math.round(clamp(p.y - drag.dy, 0, Math.max(0, imgH - s.h)))
   } else if (drag.mode === 'resize') {
-    // 拖右下角等比缩放，最小 16px，不超出底图；取整避免亚像素重采样
-    s.w = Math.round(clamp(p.x - s.x, 16, imgW - s.x))
-    s.h = Math.max(16, Math.round(s.w * (drag.oh / Math.max(drag.ow, 1))))
-    if (s.y + s.h > imgH) s.h = imgH - s.y
+    if (s.kind === 'stamp') {
+      s.w = Math.round(clamp(p.x - s.x, 16, imgW - s.x))
+      s.h = Math.max(16, Math.round(s.w * (drag.oh / Math.max(drag.ow, 1))))
+      if (s.y + s.h > imgH) s.h = imgH - s.y
+    } else if (s.kind === 'text') {
+      const w = Math.round(clamp(p.x - s.x, 16, imgW - s.x))
+      const ratio = drag.ow > 0 ? w / drag.ow : 1
+      s.w = w
+      s.h = Math.max(16, Math.round(drag.oh * ratio))
+      s.fontSize = Math.max(8, Math.round(drag.ofs * ratio))
+      if (s.y + s.h > imgH) s.h = imgH - s.y
+    } else {
+      s.w = Math.round(clamp(p.x - s.x, 4, imgW - s.x))
+      s.h = Math.round(clamp(p.y - s.y, 4, imgH - s.y))
+    }
   }
   render()
 }
@@ -507,6 +772,9 @@ function onUp() {
       pushHistory()
       pixelate(r)
     }
+  } else if (drag.mode === 'rect' && isShapeTool(tool.value)) {
+    const r = snapRect(normalizeRect(drag.sx, drag.sy, drag.cx, drag.cy))
+    if (Math.abs(r.w) > 4 || Math.abs(r.h) > 4) placeShape(tool.value as ShapeKind, r)
   }
   drag = freshDrag()
   render()
@@ -586,20 +854,131 @@ function toggleFull() {
   else void el.requestFullscreen().catch(() => ElMessage.info('当前环境不支持全屏'))
 }
 
+/* ---------- 滤镜调色 ---------- */
+
+function applyFilter(src: HTMLCanvasElement, o: { bright: number; contrast: number; gray: boolean; invert: boolean }): HTMLCanvasElement {
+  const c = cloneOf(src)
+  const ctx = c.getContext('2d')!
+  if (o.gray || o.invert || o.bright !== 0 || o.contrast !== 0) {
+    const img = ctx.getImageData(0, 0, c.width, c.height)
+    const d = img.data
+    const b = o.bright / 100
+    const cf = (259 * (o.contrast + 255)) / (255 * (259 - o.contrast))
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i]
+      let g = d[i + 1]
+      let bl = d[i + 2]
+      if (o.gray) {
+        const v = 0.299 * r + 0.587 * g + 0.114 * bl
+        r = g = bl = v
+      }
+      if (o.invert) {
+        r = 255 - r
+        g = 255 - g
+        bl = 255 - bl
+      }
+      d[i] = clamp(Math.round(cf * (r - 128) + 128 + b * 255), 0, 255)
+      d[i + 1] = clamp(Math.round(cf * (g - 128) + 128 + b * 255), 0, 255)
+      d[i + 2] = clamp(Math.round(cf * (bl - 128) + 128 + b * 255), 0, 255)
+    }
+    ctx.putImageData(img, 0, 0)
+  }
+  return c
+}
+
+function enterAdjust() {
+  if (!work) return
+  adjBase = cloneOf(work)
+  applyAdjustPreview()
+}
+
+/**
+ * 调色面板打开时先备份当前画面。
+ * 没有这一步 adjBase 永远是 null，滑块拖了也不会有反应——
+ * 表现就是"滤镜 / 调色"看起来完全坏掉。
+ */
+watch(adjOpen, v => {
+  if (v) enterAdjust()
+})
+
+function applyAdjustPreview() {
+  if (!adjBase || !work) return
+  work = applyFilter(adjBase, { bright: adjBright.value, contrast: adjContrast.value, gray: adjGray.value, invert: adjInvert.value })
+  render()
+}
+
+function applyAdjust() {
+  if (!work) return
+  // 把预览结果固化为可撤销的一步（撤销即回到进入滤镜前的状态）
+  history.push(adjBase ?? cloneOf(work))
+  if (history.length > HISTORY_MAX) history.shift()
+  historyLen.value = history.length
+  adjBase = cloneOf(work)
+  adjOpen.value = false
+  ElMessage.success('调色已应用')
+}
+
+function cancelAdjust() {
+  if (!adjBase) return
+  work = adjBase
+  adjOpen.value = false
+  render()
+}
+
 /* ---------- 供父组件导出 ---------- */
 
-async function exportBlob(format: 'image/png' | 'image/jpeg', quality: number): Promise<Blob | null> {
+interface ExportOptions {
+  /** 仅导出当前选区（含选区内的标注） */
+  region?: boolean
+  /** 扩展画布尺寸（居中留白），bg 为 null 表示透明（PNG 有效） */
+  expand?: { w: number; h: number; bg: string | null }
+}
+
+async function exportBlob(
+  format: 'image/png' | 'image/jpeg',
+  quality: number,
+  opts: ExportOptions = {}
+): Promise<Blob | null> {
   if (!work) return null
   const c = document.createElement('canvas')
-  c.width = work.width
-  c.height = work.height
   const ctx = c.getContext('2d')!
-  if (format === 'image/jpeg') {
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, c.width, c.height)
+  const jpg = format === 'image/jpeg'
+
+  if (opts.expand && opts.expand.w > 0 && opts.expand.h > 0) {
+    const { w, h, bg } = opts.expand
+    c.width = w
+    c.height = h
+    if (bg !== null) {
+      ctx.fillStyle = bg
+      ctx.fillRect(0, 0, w, h)
+    } else if (jpg) {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, w, h)
+    }
+    const ox = Math.round((w - imgW) / 2)
+    const oy = Math.round((h - imgH) / 2)
+    ctx.drawImage(work, ox, oy)
+    mergeAnno(c, stamps.value, ox, oy)
+  } else if (opts.region && selRect.value) {
+    const r = snapRect(selRect.value)
+    c.width = Math.max(1, Math.round(r.w))
+    c.height = Math.max(1, Math.round(r.h))
+    if (jpg) {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, c.width, c.height)
+    }
+    ctx.drawImage(work, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height)
+    mergeAnno(c, stamps.value, -r.x, -r.y)
+  } else {
+    c.width = work.width
+    c.height = work.height
+    if (jpg) {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, c.width, c.height)
+    }
+    ctx.drawImage(work, 0, 0)
+    mergeAnno(c, stamps.value)
   }
-  ctx.drawImage(work, 0, 0)
-  mergeStamps(c, stamps.value)
   return await new Promise(res => c.toBlob(res, format, quality / 100))
 }
 
@@ -622,7 +1001,7 @@ function onKey(e: KeyboardEvent) {
   } else if (mod && k === 'v') {
     e.preventDefault()
     pasteClip()
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && tool.value === 'stamp' && selId.value != null) {
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && tool.value !== 'select' && tool.value !== 'crop' && selId.value != null) {
     e.preventDefault()
     removeSelected()
   }
@@ -652,7 +1031,7 @@ onBeforeUnmount(() => {
 
 /* ---------- 可视化渲染 ---------- */
 
-function drawSelBox(ctx: CanvasRenderingContext2D, s: StampItem) {
+function drawSelBox(ctx: CanvasRenderingContext2D, s: AnnoItem) {
   const k = scale.value
   ctx.save()
   ctx.strokeStyle = '#409eff'
@@ -702,6 +1081,34 @@ function drawCropOverlay(ctx: CanvasRenderingContext2D, r: Rect, cssW: number, c
   ctx.restore()
 }
 
+function drawShapeAnno(ctx: CanvasRenderingContext2D, s: ShapeAnno) {
+  const k = scale.value
+  ctx.save()
+  ctx.globalAlpha = s.opacity / 100
+  ctx.strokeStyle = s.color
+  ctx.fillStyle = s.color
+  ctx.lineWidth = Math.max(1, s.lineWidth * k)
+  const x = s.x * k
+  const y = s.y * k
+  const w = s.w * k
+  const h = s.h * k
+  if (s.shape === 'rect') {
+    ctx.strokeRect(x, y, w, h)
+  } else if (s.shape === 'ellipse') {
+    ctx.beginPath()
+    ctx.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2)
+    ctx.stroke()
+  } else if (s.shape === 'line') {
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + w, y + h)
+    ctx.stroke()
+  } else {
+    drawArrow(ctx, x, y, x + w, y + h, Math.max(1, s.lineWidth * k))
+  }
+  ctx.restore()
+}
+
 function render() {
   const canvas = viewRef.value
   if (!canvas) return
@@ -726,12 +1133,33 @@ function render() {
   for (const s of stamps.value) {
     ctx.save()
     ctx.globalAlpha = s.opacity / 100
-    ctx.drawImage(s.img, s.x * k, s.y * k, s.w * k, s.h * k)
+    if (s.kind === 'stamp') {
+      ctx.drawImage(s.img, s.x * k, s.y * k, s.w * k, s.h * k)
+    } else if (s.kind === 'text') {
+      ctx.font = `${s.fontSize * k}px "Microsoft YaHei", sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      if (s.shadow) {
+        ctx.shadowColor = 'rgba(0,0,0,0.45)'
+        ctx.shadowBlur = Math.max(2, (s.fontSize * k) / 8)
+      }
+      if (s.stroke) {
+        ctx.lineWidth = Math.max(1, (s.fontSize * k) / 14)
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = '#000000'
+        ctx.strokeText(s.text, s.x * k + (s.w * k) / 2, s.y * k + (s.h * k) / 2)
+      }
+      ctx.fillStyle = s.color
+      ctx.fillText(s.text, s.x * k + (s.w * k) / 2, s.y * k + (s.h * k) / 2)
+    } else {
+      drawShapeAnno(ctx, s)
+    }
     ctx.restore()
   }
   const sel = stamps.value.find(s => s.id === selId.value)
-  if (tool.value === 'stamp' && sel) drawSelBox(ctx, sel)
+  if (sel && (tool.value === 'stamp' || tool.value === 'text' || isShapeTool(tool.value))) drawSelBox(ctx, sel)
   if (tool.value === 'mosaic' && drag.mode === 'rect') drawPendingRect(ctx)
+  if (isShapeTool(tool.value) && drag.mode === 'rect') drawPendingRect(ctx)
   if (tool.value === 'select' && selRect.value) drawRectBox(ctx, selRect.value, '#67c23a')
   if (tool.value === 'crop' && cropRect.value) drawCropOverlay(ctx, cropRect.value, cssW, cssH)
 }
@@ -745,6 +1173,11 @@ function render() {
           <el-radio-button value="mosaic">马赛克</el-radio-button>
           <el-radio-button value="cover">涂抹</el-radio-button>
           <el-radio-button value="stamp">贴图</el-radio-button>
+          <el-radio-button value="text">文字</el-radio-button>
+          <el-radio-button value="rect">矩形</el-radio-button>
+          <el-radio-button value="ellipse">椭圆</el-radio-button>
+          <el-radio-button value="line">直线</el-radio-button>
+          <el-radio-button value="arrow">箭头</el-radio-button>
           <el-radio-button value="select">框选</el-radio-button>
           <el-radio-button value="crop">裁剪</el-radio-button>
         </el-radio-group>
@@ -773,6 +1206,31 @@ function render() {
           </el-button>
         </template>
       </div>
+      <div class="ed-group" v-else-if="tool === 'text'">
+        <span class="ed-label">字号 {{ textSize }}</span>
+        <el-slider v-model="textSize" :min="12" :max="200" style="width: 90px" />
+        <span class="ed-label">颜色</span>
+        <el-color-picker v-model="textColor" show-alpha />
+        <el-checkbox v-model="textStroke">描边</el-checkbox>
+        <el-checkbox v-model="textShadow">阴影</el-checkbox>
+        <el-button size="small" :disabled="selId == null" @click="editSelectedText">编辑选中文字</el-button>
+        <span class="ed-label">透明度 {{ stampOpacity }}%</span>
+        <el-slider v-model="stampOpacity" :min="10" :max="100" style="width: 80px" />
+        <template v-if="stamps.length">
+          <el-button size="small" type="primary" plain @click="mergeDown">落下合并（{{ stamps.length }}）</el-button>
+        </template>
+        <el-button size="small" type="danger" plain :disabled="selId == null" @click="removeSelected">删除选中</el-button>
+      </div>
+      <div class="ed-group" v-else-if="isShapeTool(tool)">
+        <span class="ed-label">颜色</span>
+        <el-color-picker v-model="shapeColor" show-alpha />
+        <span class="ed-label">粗细 {{ shapeWidth }}px</span>
+        <el-slider v-model="shapeWidth" :min="1" :max="60" style="width: 90px" />
+        <span class="ed-label">透明度 {{ stampOpacity }}%</span>
+        <el-slider v-model="stampOpacity" :min="10" :max="100" style="width: 80px" />
+        <el-button size="small" type="primary" plain :disabled="!stamps.length" @click="mergeDown">落下合并（{{ stamps.length }}）</el-button>
+        <el-button size="small" type="danger" plain :disabled="selId == null" @click="removeSelected">删除选中</el-button>
+      </div>
       <div class="ed-group" v-else-if="tool === 'select'">
         <el-button size="small" type="primary" :disabled="!selRect" @click="copySelection">
           复制 Ctrl+C
@@ -786,6 +1244,40 @@ function render() {
       </div>
 
       <span class="ed-spacer" />
+      <div class="ed-group">
+        <el-popover v-model:visible="adjOpen" placement="bottom" :width="260" trigger="click">
+          <template #reference>
+            <el-button size="small" :type="adjOpen ? 'primary' : ''" plain>滤镜 / 调色</el-button>
+          </template>
+          <div class="ed-adjust">
+            <div class="ed-adjust-row">
+              <span class="ed-label">亮度 {{ adjBright }}</span>
+              <el-slider v-model="adjBright" :min="-100" :max="100" @input="applyAdjustPreview" />
+            </div>
+            <div class="ed-adjust-row">
+              <span class="ed-label">对比度 {{ adjContrast }}</span>
+              <el-slider v-model="adjContrast" :min="-100" :max="100" @input="applyAdjustPreview" />
+            </div>
+            <div class="ed-adjust-row">
+              <el-checkbox v-model="adjGray" @change="applyAdjustPreview">灰度</el-checkbox>
+              <el-checkbox v-model="adjInvert" @change="applyAdjustPreview">反色</el-checkbox>
+            </div>
+            <div class="ed-adjust-actions">
+              <el-button size="small" @click="cancelAdjust">取消</el-button>
+              <el-button size="small" type="primary" @click="applyAdjust">应用</el-button>
+            </div>
+          </div>
+        </el-popover>
+      </div>
+      <div class="ed-group">
+        <span class="ed-label">背景</span>
+        <el-radio-group v-model="bgMode" size="small">
+          <el-radio-button value="checker">棋盘</el-radio-button>
+          <el-radio-button value="white">白</el-radio-button>
+          <el-radio-button value="gray">灰</el-radio-button>
+          <el-radio-button value="black">黑</el-radio-button>
+        </el-radio-group>
+      </div>
       <div class="ed-group">
         <span class="ed-label">{{ Math.round(scale * 100) }}%</span>
         <el-button size="small" circle @click="zoom(-0.25)" title="缩小">−</el-button>
@@ -804,10 +1296,10 @@ function render() {
 
     <div class="ed-hint" v-if="ready">
       <span>{{ hint }}</span>
-      <span class="ed-label">Alt+滚轮缩放 · 滚轮平移</span>
+      <span class="ed-label">Alt+滚轮缩放 · 滚轮平移 · 双击文字可编辑</span>
     </div>
 
-    <div ref="wrapRef" class="ed-wrap">
+    <div ref="wrapRef" :class="['ed-wrap', 'bg-' + bgMode]">
       <canvas
         ref="viewRef"
         class="ed-canvas"
@@ -816,6 +1308,7 @@ function render() {
         @pointermove="onMove"
         @pointerup="onUp"
         @pointercancel="onUp"
+        @dblclick="editSelectedText"
       />
       <div v-if="!ready" class="ed-empty">在上方选择一张图片后开始标注</div>
     </div>
@@ -869,9 +1362,19 @@ function render() {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  /* 棋盘格衬底，透明 PNG 一眼可辨 */
-  background:
-    repeating-conic-gradient(var(--surface-2) 0% 25%, transparent 0% 50%) 0 0 / 20px 20px;
+}
+/* 画布背景可切换：默认柔和灰棋盘格（不随明暗主题闪成纯白/纯黑），护眼且不刺眼 */
+.ed-wrap.bg-checker {
+  background: repeating-conic-gradient(#e9e9e9 0% 25%, #dcdcdc 0% 50%) 0 0 / 22px 22px;
+}
+.ed-wrap.bg-white {
+  background: #ffffff;
+}
+.ed-wrap.bg-gray {
+  background: #d9d9d9;
+}
+.ed-wrap.bg-black {
+  background: #1e1e1e;
 }
 .ed:fullscreen {
   padding: 14px;
@@ -899,5 +1402,23 @@ function render() {
   color: var(--text-3);
   font-size: 13px;
   pointer-events: none;
+}
+.ed-adjust {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ed-adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ed-adjust-row .el-slider {
+  flex: 1;
+}
+.ed-adjust-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { PDFDocument } from 'pdf-lib'
 import { compareTables, matchFill, normalizeKey } from '../src/main/services/excelMatchService'
+import { mergeWorkbooks } from '../src/main/services/excelToolsService'
 import { buildFromImages, organizePdf, pagesInfo } from '../src/main/services/pdfService'
 
 let tmp: string
@@ -142,5 +143,81 @@ describe('PDF 页面整理 / 重建', () => {
     const r = await buildFromImages({ imagesBase64: [TINY_JPG_B64], outDir: tmp, nameHint: '小jpeg' })
     const doc = await PDFDocument.load(await fs.promises.readFile(r.outputs[0]))
     expect(doc.getPageCount()).toBe(1)
+  })
+
+  it('organizePdf 支持逐页旋转', async () => {
+    const one = await makePdf('rot.pdf', 2)
+    const r = await organizePdf({
+      paths: [one],
+      order: [
+        { source: 0, page: 0, rotate: 90 },
+        { source: 0, page: 1, rotate: 180 }
+      ],
+      outDir: tmp
+    })
+    const doc = await PDFDocument.load(await fs.promises.readFile(r.outputs[0]))
+    expect(doc.getPage(0).getRotation().angle).toBe(90)
+    expect(doc.getPage(1).getRotation().angle).toBe(180)
+  })
+})
+
+describe('跨表匹配填充增强', () => {
+  it('输出未匹配标记列与重复键提示', async () => {
+    const main = await writeSheet('m2.xlsx', [
+      ['工号', '姓名'],
+      ['1', '张三'],
+      ['9', '王五']
+    ])
+    const look = await writeSheet('l2.xlsx', [
+      ['工号', '部门'],
+      ['1', '网络部'],
+      ['1', '政企部']
+    ])
+    const r = await matchFill({
+      mainPath: main,
+      mainKey: '工号',
+      lookupPath: look,
+      lookupKey: '工号',
+      fetchColumns: ['部门'],
+      notFoundText: '',
+      outDir: tmp
+    })
+    expect(r.matched).toBe(1)
+    expect(r.unmatched).toBe(1)
+    expect(r.dupKeys).toContain('1')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.readFile(r.outputs[0])
+    const ws = wb.worksheets[0]
+    // 未匹配行在「匹配状态」列标注
+    expect(ws.getRow(1).getCell(4).value).toBe('匹配状态')
+    expect(ws.getRow(3).getCell(4).value).toBe('未匹配')
+  })
+})
+
+describe('Excel 合并表头行', () => {
+  it('可指定表头所在行（第 2 行）并归一化列名', async () => {
+    const a = await writeSheet('mh1.xlsx', [
+      ['某单位台账（2026）'],
+      ['姓名', '部门（全称）'],
+      ['张三', '网络部']
+    ])
+    const b = await writeSheet('mh2.xlsx', [
+      ['另一批'],
+      ['姓名', '部门(全称)'],
+      ['李四', '政企部']
+    ])
+    const r = await mergeWorkbooks({ paths: [a, b], mode: 'single', outDir: tmp, headerRow: 2 })
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.readFile(r.outputs[0])
+    const ws = wb.worksheets[0]
+    // 全半角括号差异被归一，列对齐为同一列
+    expect(ws.getRow(1).getCell(1).value).toBe('姓名')
+    expect(ws.getRow(2).getCell(2).value).toBe('网络部')
+    expect(ws.getRow(3).getCell(2).value).toBe('政企部')
+  })
+
+  it('表头行不存在时给出明确错误', async () => {
+    const a = await writeSheet('mh3.xlsx', [['只有一行']])
+    await expect(mergeWorkbooks({ paths: [a, a], mode: 'single', outDir: tmp, headerRow: 5 })).rejects.toThrow(/第 5 行/)
   })
 })

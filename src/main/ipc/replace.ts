@@ -1,4 +1,3 @@
-import type { ReplaceTextParams } from '@shared/types'
 import { handle } from './wrapper'
 import { runTracked } from '../services/taskProgress'
 import { replaceText } from '../services/replaceService'

@@ -11,7 +11,14 @@ import type {
   InventoryParams,
   InventoryResult
 } from '@shared/types'
-import { uniquePath } from './fileUtils'
+import { exportFilename, uniquePath } from './fileUtils'
+import { TaskCancelledError } from './taskProgress'
+
+/** 进度/取消回调：文件名循环类服务统一签名，便于 IPC 层用 runTracked 包装 */
+export interface WalkOpts {
+  onProgress?: (done: number, total?: number) => void
+  isCancelled?: () => boolean
+}
 
 export interface FileEntry {
   path: string
@@ -23,7 +30,13 @@ export interface FileEntry {
   mtimeMs: number
 }
 
-async function walkFiles(dir: string, recursive: boolean, out: FileEntry[], root: string): Promise<void> {
+async function walkFiles(
+  dir: string,
+  recursive: boolean,
+  out: FileEntry[],
+  root: string,
+  opts?: WalkOpts
+): Promise<void> {
   let items: fs.Dirent[]
   try {
     items = await fs.promises.readdir(dir, { withFileTypes: true })
@@ -31,9 +44,10 @@ async function walkFiles(dir: string, recursive: boolean, out: FileEntry[], root
     throw new Error(`无法读取文件夹：${dir}`)
   }
   for (const it of items) {
+    if (opts?.isCancelled?.()) throw new TaskCancelledError()
     const full = path.join(dir, it.name)
     if (it.isDirectory()) {
-      if (recursive) await walkFiles(full, recursive, out, root)
+      if (recursive) await walkFiles(full, recursive, out, root, opts)
       continue
     }
     if (!it.isFile()) continue
@@ -46,6 +60,8 @@ async function walkFiles(dir: string, recursive: boolean, out: FileEntry[], root
       sizeBytes: stat.size,
       mtimeMs: stat.mtimeMs
     })
+    // 目录深度遍历的总量事前未知：边发现边修正分母，前端显示"第 n 个文件"
+    opts?.onProgress?.(out.length)
   }
 }
 
@@ -70,9 +86,9 @@ function fmtTime(mtimeMs: number): string {
 
 /* ---------- 文件清单导出 ---------- */
 
-export async function exportInventory(params: InventoryParams): Promise<InventoryResult> {
+export async function exportInventory(params: InventoryParams, opts?: WalkOpts): Promise<InventoryResult> {
   const entries: FileEntry[] = []
-  await walkFiles(params.dir, params.recursive, entries, params.dir)
+  await walkFiles(params.dir, params.recursive, entries, params.dir, opts)
   if (entries.length === 0) throw new Error('该文件夹里没有文件')
   entries.sort((a, b) => a.relPath.localeCompare(b.relPath, 'zh-CN'))
 
@@ -92,7 +108,7 @@ export async function exportInventory(params: InventoryParams): Promise<Inventor
   })
   ws.getColumn(2).width = 40
   ws.getColumn(6).width = 60
-  const out = uniquePath(params.outDir, `文件清单_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  const out = uniquePath(params.outDir, exportFilename(params.name, '.xlsx', `文件清单_${new Date().toISOString().slice(0, 10)}`))
   await wb.xlsx.writeFile(out)
   return { count: entries.length, outputPath: out }
 }
@@ -104,13 +120,15 @@ async function walkForDup(
   recursive: boolean,
   minSizeBytes: number,
   out: FileEntry[],
-  root: string
+  root: string,
+  opts?: WalkOpts
 ): Promise<void> {
   const items = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => [])
   for (const it of items) {
+    if (opts?.isCancelled?.()) throw new TaskCancelledError()
     const full = path.join(dir, it.name)
     if (it.isDirectory()) {
-      if (recursive) await walkForDup(full, recursive, minSizeBytes, out, root)
+      if (recursive) await walkForDup(full, recursive, minSizeBytes, out, root, opts)
       continue
     }
     if (!it.isFile()) continue
@@ -124,6 +142,7 @@ async function walkForDup(
       sizeBytes: stat.size,
       mtimeMs: stat.mtimeMs
     })
+    opts?.onProgress?.(out.length)
   }
 }
 
@@ -140,7 +159,8 @@ async function md5File(p: string): Promise<string> {
 /** 按内容哈希把候选文件归并成重复组（纯函数，供测试；hasher 可注入） */
 export async function groupDuplicates(
   candidates: FileEntry[],
-  hasher: (p: string) => Promise<string>
+  hasher: (p: string) => Promise<string>,
+  opts?: WalkOpts
 ): Promise<DuplicateGroup[]> {
   // 先按体积分组，只有同体积的才可能内容相同
   const bySize = new Map<number, FileEntry[]>()
@@ -152,12 +172,16 @@ export async function groupDuplicates(
   const needHash: FileEntry[] = []
   for (const arr of bySize.values()) if (arr.length > 1) needHash.push(...arr)
 
+  const total = needHash.length
   const byHash = new Map<string, FileEntry[]>()
-  for (const e of needHash) {
+  for (let i = 0; i < needHash.length; i++) {
+    if (opts?.isCancelled?.()) throw new TaskCancelledError()
+    const e = needHash[i]
     const h = await hasher(e.path)
     const arr = byHash.get(h) ?? []
     arr.push(e)
     byHash.set(h, arr)
+    opts?.onProgress?.(i + 1, total)
   }
   const groups: DuplicateGroup[] = []
   for (const [hash, files] of byHash) {
@@ -173,11 +197,15 @@ function toDuplicateFile(e: FileEntry): DuplicateFile {
   return { path: e.path, name: e.name, sizeBytes: e.sizeBytes }
 }
 
-export async function findDuplicates(params: DuplicateFindParams): Promise<DuplicateResult> {
+export async function findDuplicates(
+  params: DuplicateFindParams,
+  opts?: WalkOpts
+): Promise<DuplicateResult> {
   const minSizeKB = Math.max(1, params.minSizeKB || 100)
   const entries: FileEntry[] = []
-  await walkForDup(params.dir, params.recursive, minSizeKB * 1024, entries, params.dir)
-  const groups = await groupDuplicates(entries, md5File)
+  // 第一段：遍历；第二段：对同体积文件逐个算 MD5
+  await walkForDup(params.dir, params.recursive, minSizeKB * 1024, entries, params.dir, opts)
+  const groups = await groupDuplicates(entries, md5File, opts)
   return { groups, scanned: entries.length }
 }
 
@@ -201,7 +229,80 @@ export async function exportDuplicateReport(
   })
   ws.getColumn(3).width = 40
   ws.getColumn(4).width = 70
-  const out = uniquePath(params.outDir, `重复文件报告_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  const out = uniquePath(params.outDir, exportFilename(params.name, '.xlsx', `重复文件报告_${new Date().toISOString().slice(0, 10)}`))
   await wb.xlsx.writeFile(out)
   return { outputPath: out }
+}
+
+/* ---------- 重复文件处理（安全：只移动不删除） ---------- */
+
+/**
+ * 每组重复文件按策略保留一份，其余移入「<组所在目录>/_重复文件」子文件夹。
+ * 不删除任何文件，随时可人工还原；跨目录的重复组以第一份所在目录为基准。
+ */
+export async function resolveDuplicates(params: {
+  groups: DuplicateGroup[]
+  /** earliest = 保留修改时间最早；latest = 保留最新；shortest = 保留路径最短（更浅的目录） */
+  keep: 'earliest' | 'latest' | 'shortest'
+}): Promise<{ moved: number; kept: number; failed: Array<{ name: string; reason: string }> }> {
+  let moved = 0
+  let kept = 0
+  const failed: Array<{ name: string; reason: string }> = []
+  for (const group of params.groups) {
+    if (group.files.length < 2) continue
+    const withStat = await Promise.all(
+      group.files.map(async f => {
+        try {
+          const s = await fs.promises.stat(f.path)
+          return { ...f, mtimeMs: s.mtimeMs }
+        } catch {
+          return { ...f, mtimeMs: 0 }
+        }
+      })
+    )
+    let keepIdx = 0
+    if (params.keep === 'earliest') {
+      let minMs = Infinity
+      withStat.forEach((f, i) => {
+        if (f.mtimeMs < minMs) {
+          minMs = f.mtimeMs
+          keepIdx = i
+        }
+      })
+    } else if (params.keep === 'latest') {
+      let maxMs = -Infinity
+      withStat.forEach((f, i) => {
+        if (f.mtimeMs > maxMs) {
+          maxMs = f.mtimeMs
+          keepIdx = i
+        }
+      })
+    } else {
+      // shortest：路径最短（目录层级更浅）
+      let minLen = Infinity
+      withStat.forEach((f, i) => {
+        if (f.path.length < minLen) {
+          minLen = f.path.length
+          keepIdx = i
+        }
+      })
+    }
+    kept++
+    // 以保留文件所在目录为基准建 _重复文件 子目录
+    const baseDir = path.dirname(withStat[keepIdx].path)
+    const trashDir = path.join(baseDir, '_重复文件')
+    for (let i = 0; i < withStat.length; i++) {
+      if (i === keepIdx) continue
+      const f = withStat[i]
+      try {
+        await fs.promises.mkdir(trashDir, { recursive: true })
+        const target = uniquePath(trashDir, path.basename(f.path))
+        await fs.promises.rename(f.path, target)
+        moved++
+      } catch (e) {
+        failed.push({ name: path.basename(f.path), reason: e instanceof Error ? e.message : String(e) })
+      }
+    }
+  }
+  return { moved, kept, failed }
 }

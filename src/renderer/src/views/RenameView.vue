@@ -5,9 +5,15 @@ import { ElMessage } from 'element-plus'
 import StepCard from '../components/StepCard.vue'
 import OutDirPicker from '../components/OutDirPicker.vue'
 import { call } from '../utils/api'
+import { useEnterSubmit } from '../utils/useEnterSubmit'
+import { useRemembered } from '../utils/useRememberedParams'
 import type { OrganizeMode, OrganizePair, RenamePair, UndoKind, UndoState } from '@shared/types'
 
+/** 填完参数按 Enter 直接执行（主按钮已标 data-primary-action） */
+useEnterSubmit()
+
 const mode = ref<'rename' | 'organize'>('rename')
+useRemembered('rename', 'mode', mode)
 
 /* ---------- 撤销（#6）：每类操作可一键还原最近一次执行 ---------- */
 
@@ -55,6 +61,14 @@ const rules = reactive({
   seqStep: 1,
   seqDigits: 3
 })
+
+// 记住文件类型筛选与序号等结构性规则（find/replace 等文本内容不记，避免留存敏感信息）
+useRemembered('rename', 'exts', exts)
+useRemembered('rename', 'extLower', computed({ get: () => rules.extLower, set: v => (rules.extLower = v) }))
+useRemembered('rename', 'useSeq', computed({ get: () => rules.useSeq, set: v => (rules.useSeq = v) }))
+useRemembered('rename', 'seqStart', computed({ get: () => rules.seqStart, set: v => (rules.seqStart = v) }))
+useRemembered('rename', 'seqStep', computed({ get: () => rules.seqStep, set: v => (rules.seqStep = v) }))
+useRemembered('rename', 'seqDigits', computed({ get: () => rules.seqDigits, set: v => (rules.seqDigits = v) }))
 
 const plan = ref<RenamePair[]>([])
 const making = ref(false)
@@ -130,6 +144,7 @@ function tagOf(p: RenamePair) {
 
 const oDir = ref('')
 const oMode = ref<OrganizeMode>('ext')
+useRemembered('rename', 'oMode', oMode)
 const oPlan = ref<OrganizePair[]>([])
 const oMaking = ref(false)
 const oApplying = ref(false)
@@ -192,7 +207,7 @@ async function applyOrganize() {
     <template v-if="mode === 'rename'">
       <StepCard :step="1" title="选择文件夹">
         <OutDirPicker v-model="dir" title="选择要重命名的文件夹" />
-        <div class="form-row" style="margin-top: 10px">
+        <div class="form-row mt-10">
           <div class="form-item">
             <label>只处理这些扩展名</label>
             <el-input v-model="exts" placeholder="如 jpg,png（留空 = 全部文件）" style="width: 240px" clearable />
@@ -219,7 +234,7 @@ async function applyOrganize() {
             <el-input v-model="rules.suffix" placeholder="加在扩展名前" style="width: 130px" clearable />
           </div>
         </div>
-        <div class="form-row" style="margin-top: 10px">
+        <div class="form-row mt-10">
           <div class="form-item">
             <el-checkbox v-model="rules.useSeq">加序号</el-checkbox>
           </div>
@@ -244,12 +259,12 @@ async function applyOrganize() {
       </StepCard>
 
       <StepCard :step="3" title="预览">
-        <el-button type="primary" plain :loading="making" @click="makePlan">生成预览</el-button>
+        <el-button type="primary" plain :loading="making" data-primary-action @click="makePlan">生成预览</el-button>
         <span v-if="plan.length" class="pick-count">
           共 {{ plan.length }} 项：{{ todoCount }} 项将重命名
           <template v-if="conflictCount">，<b style="color: #f56c6c">{{ conflictCount }} 项冲突</b></template>
         </span>
-        <el-table v-if="plan.length" :data="planRows" height="280" style="margin-top: 8px" size="small">
+        <el-table v-if="plan.length" :data="planRows" height="280" class="mt-8" size="small">
           <el-table-column type="index" label="#" width="44" />
           <el-table-column label="原文件名" prop="from" show-overflow-tooltip />
           <el-table-column label="新文件名" prop="to" show-overflow-tooltip />
@@ -260,7 +275,7 @@ async function applyOrganize() {
           </el-table-column>
           <el-table-column label="原因" prop="reason" show-overflow-tooltip width="190" />
         </el-table>
-        <div v-if="plan.length > 100" class="more-hint" style="margin-top: 6px">
+        <div v-if="plan.length > 100" class="more-hint mt-6">
           仅显示前 100 行，执行时按全部 {{ plan.length }} 项处理
         </div>
       </StepCard>
@@ -305,7 +320,7 @@ async function applyOrganize() {
           共 {{ oPlan.length }} 项，{{ oTodoCount }} 项将移动
           <template v-if="oConflictCount">，<b style="color: #f56c6c">{{ oConflictCount }} 项冲突</b></template>
         </span>
-        <el-table v-if="oPlan.length" :data="oPlanRows" height="280" style="margin-top: 8px" size="small">
+        <el-table v-if="oPlan.length" :data="oPlanRows" height="280" class="mt-8" size="small">
           <el-table-column type="index" label="#" width="44" />
           <el-table-column label="文件" prop="from" show-overflow-tooltip />
           <el-table-column label="移动到" prop="to" show-overflow-tooltip />

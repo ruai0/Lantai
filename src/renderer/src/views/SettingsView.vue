@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { api } from '../utils/ipc'
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, FolderChecked, Setting } from '@element-plus/icons-vue'
 import StepCard from '../components/StepCard.vue'
 import { basename } from '../utils/api'
 import { clearHistory, history, settings, updateSettings } from '../utils/settings'
+import { clearRemembered } from '../utils/useRememberedParams'
+import { clearRecentTools } from '../utils/recentTools'
 import { checkUpdate, installUpdate, syncUpdateState, updateState } from '../utils/update'
 import type { EnvProbe } from '@shared/types'
 import type { OnClose, OnComplete, Theme } from '@shared/settings'
@@ -25,6 +27,12 @@ const licBusy = ref(false)
 async function loadLicense() {
   const r = await api.licenseStatus()
   if (r.ok) license.value = r.data
+}
+
+/** 授权码回车提交；输入法选词时的回车不触发 */
+function onLicenseEnter(e: KeyboardEvent): void {
+  if (e.isComposing || e.keyCode === 229) return
+  void activateLicense()
 }
 
 async function activateLicense() {
@@ -83,6 +91,7 @@ onMounted(async () => {
   void loadProbe()
   void syncUpdateState()
   void loadLicense()
+  void loadShellMenu()
 })
 
 async function saveFeed() {
@@ -158,6 +167,57 @@ async function chooseClose(v: string | number | boolean) {
 
 async function toggleAutoStart(v: boolean | string | number) {
   await updateSettings({ autoStart: v === true })
+}
+
+async function toggleRemember(v: boolean | string | number) {
+  await updateSettings({ rememberParams: v === true })
+}
+
+/* ---------- 资源管理器右键菜单 ---------- */
+
+const shellMenu = ref<{ supported: boolean; installed: boolean; reason?: string }>({
+  supported: false,
+  installed: false
+})
+const shellBusy = ref(false)
+
+async function loadShellMenu(): Promise<void> {
+  const r = await api.shellMenuStatus()
+  if (r.ok) shellMenu.value = r.data
+}
+
+async function toggleShellMenu(v: boolean | string | number): Promise<void> {
+  shellBusy.value = true
+  try {
+    const r = v === true ? await api.shellMenuInstall() : await api.shellMenuUninstall()
+    if (!r.ok) {
+      ElMessage.error(r.error)
+      return
+    }
+    shellMenu.value = r.data
+    ElMessage.success(v === true ? '已加入资源管理器右键菜单' : '已从右键菜单移除')
+  } finally {
+    shellBusy.value = false
+  }
+}
+
+/** 清掉首页「最近使用」的记录；不动收藏、不动参数 */
+function wipeRecent(): void {
+  clearRecentTools()
+  ElMessage.success('已清除最近使用记录')
+}
+
+async function wipeParams() {
+  await ElMessageBox.confirm(
+    '将清除各工具已记住的参数（格式、模式、数值等），下次打开恢复默认。不会删除任何文件，也不会清除使用历史。',
+    '清除已记住的参数',
+    { type: 'warning', confirmButtonText: '清除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      await clearRemembered()
+      ElMessage.success('已清除记住的参数')
+    })
+    .catch(() => {})
 }
 
 function openRepo() {
@@ -254,7 +314,32 @@ function fmtTime(t: number): string {
         <span>开机自动启动（登录后常驻托盘待命）</span>
         <el-switch :model-value="settings.autoStart" @change="toggleAutoStart" />
       </div>
+      <div class="notify-row">
+        <span>记住各工具上次用的参数（下次打开自动回填）</span>
+        <el-switch :model-value="settings.rememberParams" @change="toggleRemember" />
+      </div>
+      <div class="notify-row">
+        <span>
+          资源管理器右键菜单
+          <em v-if="shellMenu.reason" class="hint-inline">（{{ shellMenu.reason }}）</em>
+        </span>
+        <el-switch
+          :model-value="shellMenu.installed"
+          :disabled="!shellMenu.supported || shellBusy"
+          :loading="shellBusy"
+          @change="toggleShellMenu"
+        />
+      </div>
+      <p v-if="shellMenu.supported" class="hint mt-4">
+        开启后，在资源管理器里选中文件右键即可直接「转换为 PDF / PDF 转图片 / PDF 压缩 / 提取文字」，
+        不必先打开兰台再选文件。仅写入当前用户注册表，卸载兰台时会一并清理。
+      </p>
       <p class="hint">收进托盘后应用继续常驻右下角：单击图标恢复，右键菜单可「检查更新 / 退出 兰台」。</p>
+      <p class="hint mt-4">
+        参数记忆只保存格式、模式、数值等设置，<b>不会保存文件路径</b>（文件可能被移动或删除）。
+        <el-button link type="danger" size="small" @click="wipeParams">清除已记住的参数</el-button>
+        <el-button link type="danger" size="small" @click="wipeRecent">清除最近使用记录</el-button>
+      </p>
     </StepCard>
 
     <StepCard :step="3" title="外观">
@@ -330,7 +415,7 @@ function fmtTime(t: number): string {
       <p v-if="updateState.notes" class="hint" style="white-space: pre-wrap">{{ updateState.notes }}</p>
       <details class="adv">
         <summary>更新源设置（一般无需修改）</summary>
-        <div class="outdir-row" style="margin-top: 10px">
+        <div class="outdir-row mt-10">
           <el-input v-model="feedInput" placeholder="留空 = 官方源" clearable @change="saveFeed" />
         </div>
         <p class="hint">默认从官方仓库检查更新；内网机器填一个存放更新文件的 http 目录地址；彻底禁用填 off。</p>
@@ -359,7 +444,7 @@ function fmtTime(t: number): string {
         </template>
       </div>
       <div class="lic-input">
-        <el-input v-model="licenseInput" placeholder="粘贴授权码（v1.…）" clearable @keyup.enter="activateLicense" />
+        <el-input v-model="licenseInput" placeholder="粘贴授权码（v1.…）" clearable @keydown.enter="onLicenseEnter" />
         <el-button type="primary" :loading="licBusy" @click="activateLicense">注册</el-button>
       </div>
     </StepCard>

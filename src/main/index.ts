@@ -8,6 +8,8 @@ import { initAutoUpdater, trayCheckForUpdates } from './ipc/update'
 import { migrateLegacyUserData } from './services/migrate'
 import { getSettings } from './services/settingsService'
 import { getIsQuitting, quitApp } from './quit'
+import { parseShellIntent } from './services/shellMenuService'
+import { setShellIntent } from './ipc/app'
 
 // Windows 通知归属与 NSIS 快捷方式的 AUMID 保持一致（打包安装器写入的是 build.appId）
 app.setAppUserModelId('com.ruai1024.lantai')
@@ -20,7 +22,21 @@ let tray: Tray | null = null
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', () => focusMainWindow())
+  app.on('second-instance', (_e, argv) => {
+    // 从资源管理器右键再次唤起时，把新的文件意图交给已开的窗口
+    const intent = parseShellIntent(argv)
+    if (intent) {
+      setShellIntent(intent)
+      getMainWindow()?.webContents.send('app:shell-intent', intent)
+    }
+    focusMainWindow()
+  })
+}
+
+// 首次启动就带右键菜单参数：先登记，等渲染层来取
+{
+  const intent = parseShellIntent(process.argv)
+  if (intent) setShellIntent(intent)
 }
 
 function toggleMainWindow(): void {

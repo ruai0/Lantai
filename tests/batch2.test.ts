@@ -6,7 +6,7 @@ import ExcelJS from 'exceljs'
 import PizZip from 'pizzip'
 import { replaceInWordXml, replaceText } from '../src/main/services/replaceService'
 import { extractContacts } from '../src/main/services/extractService'
-import { packZip, unpackZip } from '../src/main/services/zipService'
+import { listZipContents, packZip, unpackZip } from '../src/main/services/zipService'
 
 let tmp: string
 
@@ -39,6 +39,29 @@ describe('replaceInWordXml', () => {
     const [out, count] = replaceInWordXml('<w:t>abc</w:t>', 'xyz', 'q')
     expect(count).toBe(0)
     expect(out).toBe('<w:t>abc</w:t>')
+  })
+
+  it('跨 run 拆开的词也能替换（同一段落内相邻 w:t 片段）', () => {
+    // Word 常见：一个词被拆进多个 run（改字体/加粗/修订），如「张三丰」
+    const xml =
+      '<w:document><w:p><w:r><w:t>姓名：张</w:t></w:r><w:r><w:t>三</w:t></w:r><w:r><w:t>丰，职务</w:t></w:r></w:p></w:document>'
+    const [out, count] = replaceInWordXml(xml, '张三丰', '李四')
+    expect(count).toBe(1)
+    expect(out).not.toContain('张三丰')
+    expect(out.replace(/<[^>]+>/g, '')).toContain('姓名：李四，职务')
+  })
+
+  it('跨 run 替换保持片段数量不增，长度超出时顺延到末片段', () => {
+    const xml = '<w:p><w:r><w:t>AB</w:t></w:r><w:r><w:t>CD</w:t></w:r></w:p>'
+    const [out, count] = replaceInWordXml(xml, 'ABCD', 'WXYZ1234')
+    expect(count).toBe(1)
+    expect(out.replace(/<[^>]+>/g, '')).toBe('WXYZ1234')
+  })
+
+  it('不同段落不被错误拼接', () => {
+    const xml = '<w:p><w:r><w:t>张</w:t></w:r></w:p><w:p><w:r><w:t>三</w:t></w:r></w:p>'
+    const [, count] = replaceInWordXml(xml, '张三', 'X')
+    expect(count).toBe(0)
   })
 })
 
@@ -89,9 +112,15 @@ describe('extractContacts', () => {
     expect(r.idcard).toEqual([])
   })
 
-  it('提取身份证号（含 X 结尾）', () => {
-    const r = extractContacts('a330102199001011234b 33010219900101123X', ['idcard'])
-    expect(r.idcard).toEqual(['330102199001011234', '33010219900101123X'])
+  it('提取身份证号（含 X 结尾，且校验位/日期合法）', () => {
+    const r = extractContacts('a330102199001011234b 11010119900307002X', ['idcard'])
+    expect(r.idcard).toEqual(['330102199001011234', '11010119900307002X'])
+  })
+
+  it('过滤掉校验位不合法的 18 位数字串（如订单号）', () => {
+    // ...123X 校验位应为 4，属无效号；订单号 123456789012345678 也不是证件号
+    const r = extractContacts('订单 123456789012345678，证件 330102199001011234', ['idcard'])
+    expect(r.idcard).toEqual(['330102199001011234'])
   })
 
   it('提取邮箱', () => {
@@ -118,5 +147,49 @@ describe('ZIP 打包 / 解压', () => {
     expect(r.outputs).toHaveLength(1)
     expect(fs.readFileSync(path.join(r.outputs[0], '说明.txt'), 'utf-8')).toBe('中文内容')
     expect(fs.readFileSync(path.join(r.outputs[0], '子目录', '数据.csv'), 'utf-8')).toBe('a,b\n1,2')
+  })
+
+  it('挑选若干文件打包，保留共同父目录层级', async () => {
+    const base = path.join(tmp, 'picked')
+    fs.mkdirSync(path.join(base, 'a'), { recursive: true })
+    fs.mkdirSync(path.join(base, 'b'), { recursive: true })
+    const f1 = path.join(base, 'a', 'one.txt')
+    const f2 = path.join(base, 'b', 'two.txt')
+    fs.writeFileSync(f1, '1')
+    fs.writeFileSync(f2, '2')
+    const outRoot = path.join(tmp, 'picked-out')
+    fs.mkdirSync(outRoot, { recursive: true })
+    const packed = await packZip({ paths: [f1, f2], zipName: '选集', outDir: outRoot, level: 'max' })
+    expect(packed.count).toBe(2)
+    const zip = new PizZip(fs.readFileSync(packed.outputPath))
+    expect(Object.keys(zip.files).sort()).toEqual(['a/one.txt', 'b/two.txt'])
+  })
+
+  it('预览打包清单：返回文件列表与总字节数', async () => {
+    const dir = path.join(tmp, 'preview')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'x.txt'), 'hello')
+    const list = await listZipContents({ dir })
+    expect(list.files.map(f => f.rel)).toEqual(['x.txt'])
+    expect(list.totalBytes).toBe(5)
+  })
+
+  it('加密 zip 解压时给出明确提示而非“文件损坏”', async () => {
+    // 构造带通用位标志 bit0 的伪中央目录，验证 detectEncryptedZip 分支
+    const buf = Buffer.alloc(64)
+    const eocd = 22
+    buf.writeUInt32LE(0x06054b50, eocd) // EOCD 签名
+    buf.writeUInt16LE(1, eocd + 10) // 条目数
+    buf.writeUInt32LE(0, eocd + 16) // 中央目录偏移 = 0
+    buf.writeUInt32LE(0x02014b50, 0) // 中央目录条目签名
+    buf.writeUInt16LE(0x0001, 8) // 通用位标志 bit0 = 加密
+    buf.writeUInt16LE(0, 28) // 文件名长度
+    buf.writeUInt16LE(0, 30) // 扩展字段长度
+    buf.writeUInt16LE(0, 32) // 注释长度
+    const bad = path.join(tmp, 'locked.zip')
+    fs.writeFileSync(bad, buf)
+    const outRoot = path.join(tmp, 'locked-out')
+    fs.mkdirSync(outRoot, { recursive: true })
+    await expect(unpackZip({ paths: [bad], outDir: outRoot })).rejects.toThrow(/已加密/)
   })
 })

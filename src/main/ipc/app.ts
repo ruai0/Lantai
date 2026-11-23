@@ -8,6 +8,12 @@ import { getSettings } from '../services/settingsService'
 import { logMain } from '../services/log'
 import { DEFAULT_UPDATE_FEED } from './update'
 import { quitApp } from '../quit'
+import {
+  installShellMenu,
+  shellMenuStatus,
+  uninstallShellMenu,
+  type ShellIntent
+} from '../services/shellMenuService'
 
 /** 通知图标：renderer 里的 logo（打包随 asar 分发） */
 function appIcon(): Electron.NativeImage | undefined {
@@ -178,7 +184,7 @@ handle('app:relaunch', () => {
 /** 清空偏好与历史后重启（排障核选项：日志与 journal 保留） */
 handle('app:reset-settings', () => {
   const dir = app.getPath('userData')
-  for (const f of ['settings.json', 'history.json']) {
+  for (const f of ['settings.json', 'history.json', 'params.json']) {
     try {
       fs.rmSync(path.join(dir, f), { force: true })
     } catch {
@@ -189,3 +195,24 @@ handle('app:reset-settings', () => {
   app.exit(0)
   return true
 })
+
+/* ---------- 资源管理器右键菜单 ---------- */
+
+handle('app:shell-menu-status', () => shellMenuStatus())
+handle('app:shell-menu-install', () => installShellMenu())
+handle('app:shell-menu-uninstall', () => uninstallShellMenu())
+
+/** 渲染层启动后取走「从右键菜单唤起」的意图；取一次即清空，避免重复消费 */
+handle('app:take-shell-intent', () => {
+  const intent = pendingShellIntent
+  pendingShellIntent = null
+  return intent
+})
+
+/** 主进程在启动/二次启动时解析出的意图，等渲染层来取 */
+let pendingShellIntent: ShellIntent | null = null
+
+/** 由 main/index.ts 在窗口就绪前调用，登记从资源管理器带进来的文件 */
+export function setShellIntent(intent: ShellIntent | null): void {
+  pendingShellIntent = intent
+}

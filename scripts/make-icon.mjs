@@ -1,7 +1,7 @@
 /**
- * 应用图标管线：从 brand/lantai-source.png（2048 源图）自动派生全部尺寸。
+ * 应用图标管线：从 brand/台与卷扁平矢量App图标设计.png 自动派生全部尺寸。
  *   node scripts/make-icon.mjs
- * 处理：定位琥珀色印面外接框（裁掉背景与右下角水印）→ 圆角矩形 alpha 蒙版（外圈透明）
+ * 处理：定位深蓝圆角方块外接框（裁掉白色背景与右下角水印）→ 圆角矩形 alpha 蒙版（外圈透明）
  *      → 预乘 alpha 面积平均降采样 → build/icon.png(256) / public/logo.png(128) / public/tray.png(32)
  * 依赖：仅 node:zlib（内置 PNG 解码支持 8bit RGB/RGBA，含 Adam7 隔行——生图工具常输出隔行 PNG）。
  */
@@ -10,7 +10,7 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
-const SRC = path.join(ROOT, 'brand', 'lantai-source.png')
+const SRC = path.join(ROOT, 'brand', '台与卷扁平矢量App图标设计.png')
 
 /* ---------- PNG 解码（8bit，RGB/RGBA/灰度/灰+A，支持 Adam7 隔行） ---------- */
 function decodePng(buf) {
@@ -115,14 +115,15 @@ function decodePng(buf) {
   return { width, height, data: out }
 }
 
-/* ---------- 琥珀印面定位 ---------- */
-function isAmber(r, g, b) {
-  return r > 140 && g > 80 && r > b + 40
+/* ---------- 品牌方块定位（深蓝圆角底 + 橙色线条，白底背景） ---------- */
+function isBrand(r, g, b) {
+  // 深蓝底：蓝通道明显高于红、且偏暗；橙色线条 / 白背景 / 灰色水印均不满足
+  return b - r > 25 && b > 60 && r < 140
 }
 
 /**
- * 行/列投影法：背景噪点会让个别像素命中琥珀色，外接框会被拉爆；
- * 改为「该行/列命中数超过 30% 才算进入印面」，对孤立噪点免疫。
+ * 行/列投影法：背景噪点会让个别像素命中品牌色，外接框会被拉爆；
+ * 改为「该行/列命中数超过 30% 才算进入方块」，对孤立噪点免疫。
  */
 function amberBox(img) {
   const rowHits = new Int32Array(img.height)
@@ -130,7 +131,7 @@ function amberBox(img) {
   for (let y = 0; y < img.height; y++) {
     for (let x = 0; x < img.width; x++) {
       const o = (y * img.width + x) * 4
-      if (isAmber(img.data[o], img.data[o + 1], img.data[o + 2])) {
+      if (isBrand(img.data[o], img.data[o + 1], img.data[o + 2])) {
         rowHits[y]++
         colHits[x]++
       }
@@ -156,8 +157,8 @@ function amberBox(img) {
 
 /* ---------- 圆角蒙版 + 降采样 ---------- */
 /**
- * 印面蒙版（源分辨率）：每行取琥珀色最左/最右像素之间为内部。
- * 天然贴合圆角轮廓，「兰」字的深色笔画被行跨度自动填实；边缘抗锯齿交给降采样。
+ * 方块蒙版（源分辨率）：每行取品牌色最左/最右像素之间为内部。
+ * 天然贴合圆角轮廓，方块内的橙色线条被行跨度自动填实；边缘抗锯齿交给降采样。
  */
 function buildMask(img, box) {
   const mask = new Uint8Array(box.w * box.h)
@@ -166,7 +167,7 @@ function buildMask(img, box) {
     let hi = -1
     for (let x = 0; x < box.w; x++) {
       const o = (box.y + y) * img.width * 4 + (box.x + x) * 4
-      if (isAmber(img.data[o], img.data[o + 1], img.data[o + 2])) {
+      if (isBrand(img.data[o], img.data[o + 1], img.data[o + 2])) {
         if (lo < 0) lo = x
         hi = x
       }
@@ -267,7 +268,7 @@ if (process.argv.includes('--probe')) {
     const r = src.data[o]
     const g = src.data[o + 1]
     const b = src.data[o + 2]
-    if (r > 140 && g > 80 && r > b + 40) {
+    if (isBrand(r, g, b)) {
       n++
       if (samples.length < 6) samples.push(`(${i % src.width},${Math.floor(i / src.width)})=${r},${g},${b}`)
     }

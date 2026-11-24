@@ -59,12 +59,30 @@ function setState(patch: Partial<UpdateState>): void {
   push()
 }
 
-/** 从 UpdateInfo 提取展示字段（releaseNotes 可能是数组/对象，统一拍平成文本） */
+/** releaseNotes 里的 HTML 清洗为纯文本（块级标签转换行、li 转圆点、剥掉其余标签、解码常见实体） */
+function htmlToText(s: string): string {
+  return s
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<\/(h[1-6]|p|div|ul|ol|li|tr|blockquote|summary)\s*>|<br\s*\/?>|<hr\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&mdash;/gi, '—')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** 从 UpdateInfo 提取展示字段（releaseNotes 可能是数组/对象/HTML，统一拍平成纯文本） */
 function notesOf(info: UpdateInfo): string | undefined {
   const n = info.releaseNotes
   if (!n) return undefined
-  if (typeof n === 'string') return n
-  if (Array.isArray(n)) return n.map(x => (typeof x === 'string' ? x : (x as { note?: string }).note ?? '')).join('\n').trim() || undefined
+  if (typeof n === 'string') return htmlToText(n)
+  if (Array.isArray(n)) return htmlToText(n.map(x => (typeof x === 'string' ? x : (x as { note?: string }).note ?? '')).join('\n')) || undefined
   return undefined
 }
 

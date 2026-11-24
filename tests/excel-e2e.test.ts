@@ -147,7 +147,10 @@ describe('Excel 工具端到端（真实文件）', () => {
     await wb.xlsx.readFile(r.outputs[0])
     const ws = wb.worksheets[0]
     let filled = 0
-    ws.eachRow(row => row.eachCell(cell => { if (cell.fill?.fgColor?.argb && cell.fill.fgColor.argb !== 'FFFFFFFF') filled++ }))
+    ws.eachRow(row => row.eachCell(cell => {
+      const f = cell.fill as { fgColor?: { argb?: string } } | undefined
+      if (f?.fgColor?.argb && f.fgColor.argb !== 'FFFFFFFF') filled++
+    }))
     expect(filled).toBe(1) // 原始数据中只有 300 > 250，高亮一格
   })
 
